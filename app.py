@@ -1,5 +1,4 @@
 import streamlit as st
-from io import BytesIO
 from docxtpl import DocxTemplate
 import re
 from datetime import datetime, timedelta
@@ -7,63 +6,48 @@ import holidays
 
 st.title("TCS Profile Generator")
 
-# Text input
 email_text = st.text_area("Paste Candidate Email")
 
 if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
 
-
-# -------- Clean Candidate Section --------
-if "Full Name" in email_text:
-    email_text = email_text.split("Full Name", 1)[1]
-    email_text = "Full Name " + email_text
-
-
-# -------- Parse Fields --------
-def parse_fields(text):
-    data = {}
-    parts = re.split(r'\s*(?=[A-Za-z][A-Za-z0-9\s/()]+?\s*:)', text)
-
-    for part in parts:
-        if ":" in part:
-            key, value = part.split(":", 1)
-            data[key.strip().lower()] = value.strip()
-
-    return data
-
+def extract(field, text):
+    try:
+        pattern = field + r"\s*:?\s*(.*)"
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        return matches[-1].strip() if matches else " "
+    except:
+        return " "
 
 if st.button("Generate TCS Profile"):
+    if not email_text.strip():
+        st.warning("Please paste candidate email.")
+        st.stop()
+    name = extract("Full Name", email_text)
+    phone = extract("Contact Number", email_text)
+    email = extract("Email ID", email_text)
+    location = extract("Current Location", email_text)
+    pref_location = extract("Preferred Location", email_text)
+    notice = extract("Notice Period", email_text)
+    reason = extract("Reason for Change", email_text)
 
-    data = parse_fields(email_text)
-
-    name = data.get("full name (as per aadhar)", " ")
-    phone = data.get("contact number", " ")
-    email = data.get("email id", " ")
-    location = data.get("current location", " ")
-    pref_location = data.get("preferred location", " ")
-    notice = data.get("notice period", " ")
-    reason = data.get("reason for change", " ")
-    skills = data.get("skill set", " ")
-    exp = data.get("relevant experience", " ")
-
-    # Remove brackets from name
-    name = re.sub(r"\(.*?\)", "", name).strip()
-
-    # -------- Skill List --------
+    skills = extract("Skill Set", email_text)
     skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
 
     while len(skill_list) < 3:
         skill_list.append(" ")
 
-    # -------- Date Logic --------
+    exp = extract("Relevant Experience", email_text)
+
     now = datetime.now()
-    india_holidays = holidays.India(years=[now.year, now.year + 1])
+    india_holidays = holidays.India(years=now.year)
 
     dates = []
     current = now
+
     hour = now.hour
+
 
     if current.weekday() < 5 and current.date() not in india_holidays.keys():
 
@@ -83,16 +67,16 @@ if st.button("Generate TCS Profile"):
         current += timedelta(days=1)
         time1 = "10:00AM-06:00PM"
 
+
     while len(dates) < 3:
 
-        if current.weekday() >= 5 or current.date() in india_holidays.keys():
+        if current.weekday() >= 5 or current.date() in india_holidays:
             current += timedelta(days=1)
             continue
 
         dates.append(current.strftime("%d-%b-%Y"))
         current += timedelta(days=1)
 
-    # -------- Load Template --------
     doc = DocxTemplate("tcs_template.docx")
 
     context = {
@@ -111,19 +95,18 @@ if st.button("Generate TCS Profile"):
 
         "NOTICE_PERIOD": notice if notice.strip() else "Immediate",
         "OFFER": "No",
-        "RELOCATION": pref_location if pref_location.strip() else location,
+        "RELOCATION": pref_location if ref_location else location,
         "REASON": reason if reason else "Career Growth",
 
         "NEXT_DATE1": dates[0],
         "NEXT_DATE2": dates[1],
         "NEXT_DATE3": dates[2],
 
-        "TIME": time1
+        "TIME": time1, 
     }
 
     doc.render(context)
 
-    # -------- File Name --------
     mmdd = now.strftime("%m%d")
     clean = re.sub(r'[^A-Za-z0-9]', '', name)
 
@@ -132,13 +115,11 @@ if st.button("Generate TCS Profile"):
 
     file_name = f"PTN_IN_RGSID_{clean}{mmdd}.docx"
 
-    # -------- Save In Memory --------
-    file_stream = BytesIO()
-    doc.save(file_stream)
+    doc.save(file_name)
 
-    st.download_button(
-        label="Download TCS Profile",
-        data=file_stream.getvalue(),
-        file_name=file_name,
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
+    with open(file_name, "rb") as file:
+        st.download_button(
+            label="Download TCS Profile",
+            data=file,
+            file_name=file_name
+        )
