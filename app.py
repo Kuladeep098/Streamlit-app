@@ -12,10 +12,11 @@ email_text = st.text_area("Paste Candidate Email")
 if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
+email_text = re.sub(r'\s{2,}', '\n', email_text)
 
 def extract(field, text):
     try:
-        pattern = field + r"\s*:?\s*(.*)"
+        pattern = field + r"\s*:?\s*([^\n\r]+)"
         matches = re.findall(pattern, text, re.IGNORECASE)
         return matches[0].strip() if matches else " "
     except:
