@@ -12,7 +12,8 @@ email_text = st.text_area("Paste Candidate Email")
 if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
-email_text = re.sub(r'\s{2,}', '\n', email_text)
+    
+email_text = re.sub(r'\s*(Full Name|Contact Number|Email ID|Skill Set|Relevant Experience|Notice Period|Reason for Change|Current Location|Preferred Location)\s*:', r'\n\1 :', email_text)
 
 def extract(field, text):
     try:
