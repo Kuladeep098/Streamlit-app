@@ -1,4 +1,5 @@
 import streamlit as st
+from io import BytesIO
 from docxtpl import DocxTemplate
 import re
 from datetime import datetime, timedelta
@@ -117,11 +118,12 @@ if st.button("Generate TCS Profile"):
 
     file_name = f"PTN_IN_RGSID_{clean}{mmdd}.docx"
 
-    doc.save(file_name)
+    file_stream = BytesIO()
+    doc.save(file_stream)
 
-    with open(file_name, "rb") as file:
-        st.download_button(
-            label="Download TCS Profile",
-            data=file,
-            file_name=file_name
-        )
+    st.download_button(
+        label="Download TCS Profile",
+        data=file_stream.getvalue(),
+        file_name=file_name,
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
