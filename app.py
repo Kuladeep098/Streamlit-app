@@ -28,6 +28,7 @@ if st.button("Generate TCS Profile"):
     phone = extract("Contact Number", email_text)
     email = extract("Email ID", email_text)
     location = extract("Current Location", email_text)
+    pref_location = extract("Preferred Location", email_text)
     notice = extract("Notice Period", email_text)
     reason = extract("Reason for Change", email_text)
 
@@ -35,7 +36,7 @@ if st.button("Generate TCS Profile"):
     skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
 
     while len(skill_list) < 3:
-        skill_list.append("")
+        skill_list.append(" ")
 
     exp = extract("Relevant Experience", email_text)
 
@@ -45,34 +46,36 @@ if st.button("Generate TCS Profile"):
     dates = []
     current = now
 
-    while len(dates) < 3:
-        current += timedelta(days=1)
-
-        if current.weekday() >= 5:
-            continue
-
-        if current.date() in india_holidays:
-            continue
-
-        dates.append(current.strftime("%d-%b-%Y"))
-
-    today = now.date()
-
-    first_date = datetime.strptime(dates[0], "%d-%b-%Y").date()
-
     hour = now.hour
 
-    if first_date == today:
-    
+
+    if current.weekday() < 5 and current.date() not in india_holidays.keys():
+
         if hour < 10:
+            dates.append(current.strftime("%d-%b-%Y"))
             time1 = "10:00AM-06:00PM"
+
         elif hour < 14:
+            dates.append(current.strftime("%d-%b-%Y"))
             time1 = "02:00PM-06:00PM"
+
         else:
+            current += timedelta(days=1)
             time1 = "10:00AM-06:00PM"
 
     else:
+        current += timedelta(days=1)
         time1 = "10:00AM-06:00PM"
+
+
+    while len(dates) < 3:
+
+        if current.weekday() >= 5 or current.date() in india_holidays.keys():
+            current += timedelta(days=1)
+            continue
+
+        dates.append(current.strftime("%d-%b-%Y"))
+        current += timedelta(days=1)
 
     doc = DocxTemplate("tcs_template.docx")
 
@@ -90,18 +93,16 @@ if st.button("Generate TCS Profile"):
         "EXP2": exp,
         "EXP3": exp,
 
-        "NOTICE_PERIOD": notice,
+        "NOTICE_PERIOD": notice if notice.strip() else "Immediate",
         "OFFER": "No",
-        "RELOCATION": location,
+        "RELOCATION": pref_location if pref_location else location,
         "REASON": reason if reason else "Career Growth",
 
         "NEXT_DATE1": dates[0],
         "NEXT_DATE2": dates[1],
         "NEXT_DATE3": dates[2],
 
-        "TIME1": time1, 
-        "TIME2": "10:00AM-06:00PM",
-        "TIME3": "10:00AM-06:00PM"
+        "TIME": time1, 
     }
 
     doc.render(context)
