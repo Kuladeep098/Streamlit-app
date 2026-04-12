@@ -12,14 +12,13 @@ email_text = st.text_area("Paste Candidate Email")
 if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
-    
-email_text = re.sub(r'\s*(Full Name|Contact Number|Email ID|Skill Set|Relevant Experience|Notice Period|Reason for Change|Current Location|Preferred Location)\s*:', r'\n\1 :', email_text)
+email_text = re.sub(r'\s*(?=[A-Za-z][A-Za-z0-9\s/()]+?:)', '\n', email_text)
 
 def extract(field, text):
     try:
-        pattern = field + r"\s*:?\s*(.*?)\s*(?=[A-Z][A-Za-z\s/()]+?:|$)"
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        return matches[0].strip() if matches else " "
+        pattern = rf"{field}.*?:\s*([^\n]+)"
+        match = re.search(pattern, text, re.IGNORECASE)
+        return match.group(1).strip() if match else " "
     except:
         return " "
 
@@ -29,7 +28,7 @@ if st.button("Generate TCS Profile"):
         st.stop()
         
     name = extract("Full Name", email_text)
-    name = re.sub(r"\(.*?\)\s*:\s*", "", name)
+    name = re.sub(r"\(.*?\)", "", name).strip()
     phone = extract("Contact Number", email_text)
     email = extract("Email ID", email_text)
     location = extract("Current Location", email_text)
