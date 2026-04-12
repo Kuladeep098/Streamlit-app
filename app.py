@@ -8,12 +8,22 @@ st.title("TCS Profile Generator")
 
 email_text = st.text_area("Paste Candidate Email")
 
+if not email_text.strip():
+    st.warning("Please paste candidate email.")
+    st.stop()
+
 def extract(field, text):
-    matches = re.findall(field + r".*?:\s*(.*)", text, re.IGNORECASE)
-    return matches[-1].strip() if matches else ""
+    try:
+        pattern = field + r"\s*:?\s*(.*)"
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        return matches[-1].strip() if matches else " "
+    except:
+        return " "
 
 if st.button("Generate TCS Profile"):
-
+    if not email_text.strip():
+        st.warning("Please paste candidate email.")
+        st.stop()
     name = extract("Full Name", email_text)
     phone = extract("Contact Number", email_text)
     email = extract("Email ID", email_text)
@@ -22,7 +32,7 @@ if st.button("Generate TCS Profile"):
     reason = extract("Reason for Change", email_text)
 
     skills = extract("Skill Set", email_text)
-    skill_list = [s.strip() for s in re.split(r",|/|;", skills)]
+    skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
 
     while len(skill_list) < 3:
         skill_list.append("")
@@ -46,14 +56,23 @@ if st.button("Generate TCS Profile"):
 
         dates.append(current.strftime("%d-%b-%Y"))
 
+    today = now.date()
+
+    first_date = datetime.strptime(dates[0], "%d-%b-%Y").date()
+
     hour = now.hour
 
-    if hour < 10:
-        time_slot = "10:00AM-06:00PM"
-    elif hour < 14:
-        time_slot = "02:00PM-06:00PM"
+    if first_date == today:
+    
+        if hour < 10:
+            time1 = "10:00AM-06:00PM"
+        elif hour < 14:
+            time1 = "02:00PM-06:00PM"
+        else:
+            time1 = "10:00AM-06:00PM"
+
     else:
-        time_slot = "10:00AM-06:00PM"
+        time1 = "10:00AM-06:00PM"
 
     doc = DocxTemplate("tcs_template.docx")
 
@@ -74,19 +93,24 @@ if st.button("Generate TCS Profile"):
         "NOTICE_PERIOD": notice,
         "OFFER": "No",
         "RELOCATION": location,
-        "REASON": reason,
+        "REASON": reason if reason else "Career Growth",
 
         "NEXT_DATE1": dates[0],
         "NEXT_DATE2": dates[1],
         "NEXT_DATE3": dates[2],
 
-        "TIME": time_slot
+        "TIME1": time1, 
+        "TIME2": "10:00AM-06:00PM",
+        "TIME3": "10:00AM-06:00PM"
     }
 
     doc.render(context)
 
     mmdd = now.strftime("%m%d")
-    clean = name.replace(" ", "")
+    clean = re.sub(r'[^A-Za-z0-9]', '', name)
+
+    if not clean:
+        clean = "Profile"
 
     file_name = f"PTN_IN_RGSID_{clean}{mmdd}.docx"
 
