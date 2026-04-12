@@ -16,7 +16,7 @@ def extract(field, text):
     try:
         pattern = field + r"\s*:?\s*(.*)"
         matches = re.findall(pattern, text, re.IGNORECASE)
-        return matches[-1].strip() if matches else " "
+        return matches[0].strip() if matches else " "
     except:
         return " "
 
@@ -24,7 +24,9 @@ if st.button("Generate TCS Profile"):
     if not email_text.strip():
         st.warning("Please paste candidate email.")
         st.stop()
+        
     name = extract("Full Name", email_text)
+    name = re.sub(r"\(.*?\)\s*:\s*", "", name)
     phone = extract("Contact Number", email_text)
     email = extract("Email ID", email_text)
     location = extract("Current Location", email_text)
@@ -95,7 +97,7 @@ if st.button("Generate TCS Profile"):
 
         "NOTICE_PERIOD": notice if notice.strip() else "Immediate",
         "OFFER": "No",
-        "RELOCATION": pref_location if pref_location else location,
+        "RELOCATION": pref_location if pref_location.strip() else location,
         "REASON": reason if reason else "Career Growth",
 
         "NEXT_DATE1": dates[0],
