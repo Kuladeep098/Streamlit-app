@@ -12,38 +12,46 @@ if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
 
-def extract(field, text):
-    try:
-        pattern = rf"{field}[^\n]*:\s*([^\n]+)"
-        match = re.search(pattern, text, re.IGNORECASE)
-        return match.group(1).strip() if match else " "
-    except:
-        return " "
+def parse_fields(text):
+    data = {}
+    parts = re.split(r'\s*(?=[A-Za-z][A-Za-z0-9\s/()]+?:)', text)
+
+    for part in parts:
+        if ":" in part:
+            key, value = part.split(":", 1)
+            data[key.strip().lower()] = value.strip()
+
+    return data
+
+
 
 if st.button("Generate TCS Profile"):
     if not email_text.strip():
         st.warning("Please paste candidate email.")
         st.stop()
+    if "Full Name" in email_text:
+        email_text = email_text.split("Full Name",1)[1]
+        email_text = "Full Name " + email_text
         
-    name = extract("Full Name", email_text)
-    name = re.sub(r"\(.*?\)", "", name).strip()
-    phone = extract("Contact Number", email_text)
-    email = extract("Email ID", email_text)
-    location = extract("Current Location", email_text)
-    pref_location = extract("Preferred Location", email_text)
-    notice = extract("Notice Period", email_text)
-    reason = extract("Reason for Change", email_text)
+    data = parse_fields(email_text)
 
-    skills = extract("Skill Set", email_text)
+    name = data.get("full name (as per aadhar)", " ")
+    phone = data.get("contact number", " ")
+    email = data.get("email id", " ")
+    location = data.get("current location", " ")
+    pref_location = data.get("preferred location", " ")
+    notice = data.get("notice period", " ")
+    reason = data.get("reason for change", " ")
+    skills = data.get("skill set", " ")
+    exp = data.get("relevant experience", " ")
+   
     skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
 
     while len(skill_list) < 3:
         skill_list.append(" ")
 
-    exp = extract("Relevant Experience", email_text)
-
     now = datetime.now()
-    india_holidays = holidays.India(years=now.year)
+    india_holidays = holidays.India(years=[now.year, now.year + 1])
 
     dates = []
     current = now
@@ -119,6 +127,7 @@ if st.button("Generate TCS Profile"):
 
     file_stream = BytesIO()
     doc.save(file_stream)
+
 
     st.download_button(
         label="Download TCS Profile",
