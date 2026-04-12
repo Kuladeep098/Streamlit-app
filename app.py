@@ -12,20 +12,17 @@ if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
 
+
+# SAFE FIELD EXTRACTION
 def extract(field, text):
-    try:
-        pattern = field + r"\s*:?\s*(.*)"
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        return matches[-1].strip() if matches else " "
-    except:
-        return " "
+    match = re.search(rf"^{field}\s*:\s*(.*)", text, re.MULTILINE | re.IGNORECASE)
+    return match.group(1).strip() if match else ""
+
 
 if st.button("Generate TCS Profile"):
-    if not email_text.strip():
-        st.warning("Please paste candidate email.")
-        st.stop()
-    name = extract("Full Name", email_text)
-    phone = extract("Contact Number", email_text)
+
+    name = extract(r"Full Name \(As per Aadhar\)", email_text)
+    phone = extract("Contact Number", email_text)[:15]
     email = extract("Email ID", email_text)
     location = extract("Current Location", email_text)
     pref_location = extract("Preferred Location", email_text)
@@ -45,11 +42,10 @@ if st.button("Generate TCS Profile"):
 
     dates = []
     current = now
-
     hour = now.hour
 
 
-    if current.weekday() < 5 and current.date() not in india_holidays.keys():
+    if current.weekday() < 5 and current.date() not in india_holidays:
 
         if hour < 10:
             dates.append(current.strftime("%d-%b-%Y"))
@@ -77,6 +73,7 @@ if st.button("Generate TCS Profile"):
         dates.append(current.strftime("%d-%b-%Y"))
         current += timedelta(days=1)
 
+
     doc = DocxTemplate("tcs_template.docx")
 
     context = {
@@ -93,7 +90,7 @@ if st.button("Generate TCS Profile"):
         "EXP2": exp,
         "EXP3": exp,
 
-        "NOTICE_PERIOD": notice if notice.strip() else "Immediate",
+        "NOTICE_PERIOD": notice if notice else "Immediate",
         "OFFER": "No",
         "RELOCATION": pref_location if pref_location else location,
         "REASON": reason if reason else "Career Growth",
@@ -102,7 +99,7 @@ if st.button("Generate TCS Profile"):
         "NEXT_DATE2": dates[1],
         "NEXT_DATE3": dates[2],
 
-        "TIME": time1, 
+        "TIME": time1,
     }
 
     doc.render(context)
