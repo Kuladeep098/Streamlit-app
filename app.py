@@ -7,14 +7,24 @@ import holidays
 
 st.title("TCS Profile Generator")
 
+# Text input
 email_text = st.text_area("Paste Candidate Email")
+
 if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
 
+
+# -------- Clean Candidate Section --------
+if "Full Name" in email_text:
+    email_text = email_text.split("Full Name", 1)[1]
+    email_text = "Full Name " + email_text
+
+
+# -------- Parse Fields --------
 def parse_fields(text):
     data = {}
-    parts = re.split(r'\s*(?=[A-Za-z][A-Za-z0-9\s/()]+?:)', text)
+    parts = re.split(r'\s*(?=[A-Za-z][A-Za-z0-9\s/()]+?\s*:)', text)
 
     for part in parts:
         if ":" in part:
@@ -24,15 +34,8 @@ def parse_fields(text):
     return data
 
 
-
 if st.button("Generate TCS Profile"):
-    if not email_text.strip():
-        st.warning("Please paste candidate email.")
-        st.stop()
-    if "Full Name" in email_text:
-        email_text = email_text.split("Full Name",1)[1]
-        email_text = "Full Name " + email_text
-        
+
     data = parse_fields(email_text)
 
     name = data.get("full name (as per aadhar)", " ")
@@ -44,20 +47,23 @@ if st.button("Generate TCS Profile"):
     reason = data.get("reason for change", " ")
     skills = data.get("skill set", " ")
     exp = data.get("relevant experience", " ")
-   
+
+    # Remove brackets from name
+    name = re.sub(r"\(.*?\)", "", name).strip()
+
+    # -------- Skill List --------
     skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
 
     while len(skill_list) < 3:
         skill_list.append(" ")
 
+    # -------- Date Logic --------
     now = datetime.now()
     india_holidays = holidays.India(years=[now.year, now.year + 1])
 
     dates = []
     current = now
-
     hour = now.hour
-
 
     if current.weekday() < 5 and current.date() not in india_holidays.keys():
 
@@ -77,7 +83,6 @@ if st.button("Generate TCS Profile"):
         current += timedelta(days=1)
         time1 = "10:00AM-06:00PM"
 
-
     while len(dates) < 3:
 
         if current.weekday() >= 5 or current.date() in india_holidays.keys():
@@ -87,6 +92,7 @@ if st.button("Generate TCS Profile"):
         dates.append(current.strftime("%d-%b-%Y"))
         current += timedelta(days=1)
 
+    # -------- Load Template --------
     doc = DocxTemplate("tcs_template.docx")
 
     context = {
@@ -112,11 +118,12 @@ if st.button("Generate TCS Profile"):
         "NEXT_DATE2": dates[1],
         "NEXT_DATE3": dates[2],
 
-        "TIME": time1, 
+        "TIME": time1
     }
 
     doc.render(context)
 
+    # -------- File Name --------
     mmdd = now.strftime("%m%d")
     clean = re.sub(r'[^A-Za-z0-9]', '', name)
 
@@ -125,9 +132,9 @@ if st.button("Generate TCS Profile"):
 
     file_name = f"PTN_IN_RGSID_{clean}{mmdd}.docx"
 
+    # -------- Save In Memory --------
     file_stream = BytesIO()
     doc.save(file_stream)
-
 
     st.download_button(
         label="Download TCS Profile",
