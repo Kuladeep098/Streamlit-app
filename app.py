@@ -12,6 +12,20 @@ if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
 
+def clean_email(text):
+    stop_words = [
+    "Warm Regards",
+    "Thanks & Regards",
+    "Best Regards",
+    "Regards",
+    "Kind Regards",
+]
+    for word in stop_words:
+        if word in text:
+            text = text.split(word)[0]
+    return text
+
+email_text = clean_email(email_text)
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
@@ -22,20 +36,31 @@ def extract(field, text):
 if st.button("Generate TCS Profile"):
 
     name = extract(r"Full Name \(As per Aadhar\)", email_text)
-    phone = extract("Contact Number", email_text)[:15]
+    phone = extract("Contact Number", email_text)
+    phone = re.findall(r"\d{10}", phone)
+    phone = phone[0] if phone else ""
     email = extract("Email ID", email_text)
     location = extract("Current Location", email_text)
     pref_location = extract("Preferred Location", email_text)
     notice = extract("Notice Period", email_text)
     reason = extract("Reason for Change", email_text)
+    if reason and ":" in reason:
+        reason = ""
 
     skills = extract("Skill Set", email_text)
-    skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
+
+
+    if skills:
+        skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
+    else:
+        skill_list = []
 
     while len(skill_list) < 3:
         skill_list.append(" ")
 
     exp = extract("Relevant Experience", email_text)
+    if not exp:
+        exp = extract("Total Experience", email_text)
 
     now = datetime.now()
     india_holidays = holidays.India(years=now.year)
