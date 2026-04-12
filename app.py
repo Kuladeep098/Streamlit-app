@@ -17,7 +17,7 @@ email_text = re.sub(r'\s*(Full Name|Contact Number|Email ID|Skill Set|Relevant E
 
 def extract(field, text):
     try:
-        pattern = field + r"\s*:?\s*([^\n\r]+)"
+        pattern = field + r"\s*:?\s*(.*?)\s*(?=[A-Z][A-Za-z\s/()]+?:|$)"
         matches = re.findall(pattern, text, re.IGNORECASE)
         return matches[0].strip() if matches else " "
     except:
