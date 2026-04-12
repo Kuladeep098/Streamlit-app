@@ -55,7 +55,7 @@ if st.button("Generate TCS Profile"):
     else:
         time_slot = "10:00AM-06:00PM"
 
-    doc = DocxTemplate("TCS Resume Template(1).docx")
+    doc = DocxTemplate("tcs_template.docx")
 
     context = {
         "NAME": name,
