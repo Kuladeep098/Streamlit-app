@@ -95,7 +95,7 @@ if st.button("Generate TCS Profile"):
 
         "NOTICE_PERIOD": notice if notice.strip() else "Immediate",
         "OFFER": "No",
-        "RELOCATION": pref_location if ref_location else location,
+        "RELOCATION": pref_location if pref_location else location,
         "REASON": reason if reason else "Career Growth",
 
         "NEXT_DATE1": dates[0],
