@@ -114,7 +114,7 @@ if st.button("Generate TCS Profile"):
 
 
     # LOAD TEMPLATE
-    doc = DocxTemplate("tcs_template (1).docx")
+    doc = DocxTemplate("tcs_template.docx")
 
     context = {
         "NAME": name,
