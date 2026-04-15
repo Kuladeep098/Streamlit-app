@@ -3,6 +3,7 @@ from docxtpl import DocxTemplate
 import re
 from datetime import datetime, timedelta
 import holidays
+from dateutil import parser   # NEW (auto date parsing)
 
 st.title("TCS Profile Generator")
 
@@ -71,10 +72,12 @@ if st.button("Generate TCS Profile"):
     while len(skill_list) < 3:
         skill_list.append(" ")
 
+
     # EXPERIENCE
     exp = extract("Relevant Experience", email_text)
     if not exp:
         exp = extract("Total Experience", email_text)
+
 
     now = datetime.now()
     india_holidays = holidays.India(years=now.year)
@@ -145,15 +148,15 @@ if st.button("Generate TCS Profile"):
     doc.render(context)
 
 
-    # DOB → MMDD
+    # DOB → MMDD (SMART VERSION)
     mmdd = ""
 
     if dob:
-        match = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', dob)
-        if match:
-            day = match.group(1).zfill(2)
-            month = match.group(2).zfill(2)
-            mmdd = month + day
+        try:
+            date_obj = parser.parse(dob)
+            mmdd = date_obj.strftime("%m%d")
+        except:
+            mmdd = ""
 
 
     # CLEAN NAME
