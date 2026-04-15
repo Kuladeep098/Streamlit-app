@@ -8,24 +8,30 @@ st.title("TCS Profile Generator")
 
 email_text = st.text_area("Paste Candidate Email")
 
-email_text = clean_email(email_text)
-
 if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
 
+
+# CLEAN EMAIL
 def clean_email(text):
     stop_words = [
-    "Warm Regards",
-    "Thanks & Regards",
-    "Best Regards",
-    "Regards",
-    "Kind Regards",
-]
+        "Warm Regards",
+        "Thanks & Regards",
+        "Best Regards",
+        "Regards",
+        "Kind Regards",
+    ]
+
     for word in stop_words:
         if word in text:
             text = text.split(word)[0]
+
     return text
+
+
+email_text = clean_email(email_text)
+
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
@@ -36,19 +42,27 @@ def extract(field, text):
 if st.button("Generate TCS Profile"):
 
     name = extract(r"Full Name \(As per Aadhar\)", email_text)
+
     phone = extract("Contact Number", email_text)
-    phone = re.findall(r"\d{10}", phone)
-    phone = phone[0] if phone else ""
+    phone_match = re.search(r"\d{10}", phone)
+    phone = phone_match.group() if phone_match else ""
+
     email = extract("Email ID", email_text)
+
     location = extract("Current Location", email_text)
+
     pref_location = extract("Preferred Location", email_text)
+
     notice = extract("Notice Period", email_text)
+
     reason = extract("Reason for Change", email_text)
-    reason = reason.split(":")[0] if reason else ""
 
     skills = extract("Skill Set", email_text)
 
+    dob = extract("Date of Birth", email_text)
 
+
+    # SKILL PROCESSING
     if skills:
         skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
     else:
@@ -57,6 +71,7 @@ if st.button("Generate TCS Profile"):
     while len(skill_list) < 3:
         skill_list.append(" ")
 
+    # EXPERIENCE
     exp = extract("Relevant Experience", email_text)
     if not exp:
         exp = extract("Total Experience", email_text)
@@ -98,7 +113,8 @@ if st.button("Generate TCS Profile"):
         current += timedelta(days=1)
 
 
-    doc = DocxTemplate("tcs_template.docx")
+    # LOAD TEMPLATE
+    doc = DocxTemplate("tcs_template (1).docx")
 
     context = {
         "NAME": name,
@@ -128,16 +144,32 @@ if st.button("Generate TCS Profile"):
 
     doc.render(context)
 
-    mmdd = now.strftime("%m%d")
+
+    # DOB → MMDD
+    mmdd = ""
+
+    if dob:
+        match = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](\d{4})', dob)
+        if match:
+            day = match.group(1).zfill(2)
+            month = match.group(2).zfill(2)
+            mmdd = month + day
+
+
+    # CLEAN NAME
     clean = re.sub(r'[^A-Za-z0-9]', '', name)
 
     if not clean:
         clean = "Profile"
 
+
+    # FILE NAME
     file_name = f"PTN_IN_RGSID_{clean}{mmdd}.docx"
 
     doc.save(file_name)
 
+
+    # DOWNLOAD BUTTON
     with open(file_name, "rb") as file:
         st.download_button(
             label="Download TCS Profile",
