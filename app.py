@@ -8,6 +8,8 @@ st.title("TCS Profile Generator")
 
 email_text = st.text_area("Paste Candidate Email")
 
+email_text = clean_email(email_text)
+
 if not email_text.strip():
     st.warning("Please paste candidate email.")
     st.stop()
@@ -24,8 +26,6 @@ def clean_email(text):
         if word in text:
             text = text.split(word)[0]
     return text
-
-email_text = clean_email(email_text)
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
@@ -44,8 +44,7 @@ if st.button("Generate TCS Profile"):
     pref_location = extract("Preferred Location", email_text)
     notice = extract("Notice Period", email_text)
     reason = extract("Reason for Change", email_text)
-    if reason and ":" in reason:
-        reason = ""
+    reason = reason.split(":")[0] if reason else ""
 
     skills = extract("Skill Set", email_text)
 
