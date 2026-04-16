@@ -34,8 +34,7 @@ def clean_email(text):
 email_text = clean_email(email_text)
 
 # REMOVE HIDDEN CHARACTERS
-email_text = email_text.replace("​", "")
-email_text = email_text.replace("", "")
+email_text = re.sub(r'[^\x00-\x7F]+', ' ', email_text)
 
 
 # SPLIT PROFESSIONAL AND CANDIDATE SECTIONS
@@ -47,21 +46,21 @@ candidate_text = parts[1] if len(parts) > 1 else email_text
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
-    pattern = rf"{field}\s*[:\-]\s*(.+)"
-    match = re.search(pattern, text, re.IGNORECASE)
+    pattern = rf"^\s*{field}\s*[:\-]\s*(.+)$"
+    match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
     return match.group(1).strip() if match else ""
 
 
 if st.button("Generate TCS Profile"):
 
     # CANDIDATE DETAILS
-    name = extract(r"Full Name \(As per Aadhar\)", candidate_text)
+    name = extract(r"Full Name \(As per Aadhar\)|Full Name|Name", candidate_text)
 
     phone = extract("Contact Number", candidate_text)
     phone_match = re.search(r"\d{10}", phone)
     phone = phone_match.group() if phone_match else ""
 
-    email = extract("Email ID", candidate_text)
+    email = extract("Email ID|Email", candidate_text)
 
     dob = extract("Date of Birth", candidate_text)
 
