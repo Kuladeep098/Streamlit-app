@@ -3,7 +3,7 @@ from docxtpl import DocxTemplate
 import re
 from datetime import datetime, timedelta
 import holidays
-from dateutil import parser
+from dateutil import parser   # NEW (auto date parsing)
 
 st.title("TCS Profile Generator")
 
@@ -33,46 +33,32 @@ def clean_email(text):
 
 email_text = clean_email(email_text)
 
-# REMOVE HIDDEN CHARACTERS
-email_text = re.sub(r'[^\x00-\x7F]+', ' ', email_text)
-
-
-# SPLIT PROFESSIONAL AND CANDIDATE SECTIONS
-parts = re.split(r"Candidate\s*Details\s*:", email_text, flags=re.IGNORECASE)
-
-professional_text = parts[0]
-candidate_text = parts[1] if len(parts) > 1 else email_text
-
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
-    pattern = rf"^\s*{field}\s*[:\-]\s*(.+)$"
-    match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+    match = re.search(rf"^{field}\s*:\s*(.*)", text, re.MULTILINE | re.IGNORECASE)
     return match.group(1).strip() if match else ""
 
 
 if st.button("Generate TCS Profile"):
 
-    # CANDIDATE DETAILS
-    name = extract(r"Full Name \(As per Aadhar\)|Full Name|Name", candidate_text)
+    name = extract(r"Full Name \(As per Aadhar\)", email_text)
 
-    phone = extract("Contact Number", candidate_text)
+    phone = extract("Contact Number", email_text)
     phone_match = re.search(r"\d{10}", phone)
     phone = phone_match.group() if phone_match else ""
 
-    email = extract("Email ID|Email", candidate_text)
+    email = extract("Email ID", email_text)
 
-    dob = extract("Date of Birth", candidate_text)
+    location = extract("Current Location", email_text)
 
+    pref_location = extract("Preferred Location", email_text)
 
-    # PROFESSIONAL DETAILS
-    location = extract("Current Location", professional_text)
+    notice = extract("Notice Period", email_text)
 
-    pref_location = extract("Preferred Location|Peferred Location", professional_text)
+    skills = extract("Skill Set", email_text)
 
-    notice = extract("Notice Period", professional_text)
-
-    skills = extract("Skill Set", professional_text)
+    dob = extract("Date of Birth", email_text)
 
 
     # SKILL PROCESSING
@@ -86,9 +72,9 @@ if st.button("Generate TCS Profile"):
 
 
     # EXPERIENCE
-    exp = extract("Relevant Experience", professional_text)
+    exp = extract("Relevant Experience", email_text)
     if not exp:
-        exp = extract("Total Experience", professional_text)
+        exp = extract("Total Experience", email_text)
 
 
     now = datetime.now()
@@ -145,7 +131,7 @@ if st.button("Generate TCS Profile"):
         "EXP2": exp,
         "EXP3": exp,
 
-        "NOTICE_PERIOD": notice if notice else "Immediate",
+        "NOTICE_PERIOD": "Immediate",
         "OFFER": "No",
         "RELOCATION": pref_location if pref_location else location,
         "REASON": "Career Growth",
@@ -160,7 +146,7 @@ if st.button("Generate TCS Profile"):
     doc.render(context)
 
 
-    # DOB → MMDD
+    # DOB → MMDD (SMART VERSION)
     mmdd = ""
 
     if dob:
