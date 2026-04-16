@@ -33,6 +33,9 @@ def clean_email(text):
 
 email_text = clean_email(email_text)
 
+email_text = email_text.replace("​", "")
+email_text = email_text.replace("", "")
+
 # CUT TEXT FROM "Candidate Details"
 candidate_start = re.search(r"Candidate Details\s*:", email_text, re.IGNORECASE)
 
@@ -42,7 +45,7 @@ if candidate_start:
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
-    match = re.search(rf"^{field}\s*:\s*(.*)", text, re.MULTILINE | re.IGNORECASE)
+    match = re.search(rf"^\s*{field}\s*:\s*(.*)", text, re.MULTILINE | re.IGNORECASE)
     return match.group(1).strip() if match else ""
 
 
@@ -58,7 +61,7 @@ if st.button("Generate TCS Profile"):
 
     location = extract("Current Location", email_text)
 
-    pref_location = extract("Preferred Location", email_text)
+    pref_location = extract("Preferred Location|Peferred Location", email_text)
 
     notice = extract("Notice Period", email_text)
 
