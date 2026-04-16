@@ -56,8 +56,6 @@ if st.button("Generate TCS Profile"):
 
     notice = extract("Notice Period", email_text)
 
-    reason = extract("Reason for Change", email_text)
-
     skills = extract("Skill Set", email_text)
 
     dob = extract("Date of Birth", email_text)
@@ -133,10 +131,10 @@ if st.button("Generate TCS Profile"):
         "EXP2": exp,
         "EXP3": exp,
 
-        "NOTICE_PERIOD": notice if notice else "Immediate",
+        "NOTICE_PERIOD": "Immediate",
         "OFFER": "No",
         "RELOCATION": pref_location if pref_location else location,
-        "REASON": reason if reason else "Career Growth",
+        "REASON": "Career Growth",
 
         "NEXT_DATE1": dates[0],
         "NEXT_DATE2": dates[1],
