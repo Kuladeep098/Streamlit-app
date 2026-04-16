@@ -33,6 +33,12 @@ def clean_email(text):
 
 email_text = clean_email(email_text)
 
+# CUT TEXT FROM "Candidate Details"
+candidate_start = re.search(r"Candidate Details\s*:", email_text, re.IGNORECASE)
+
+if candidate_start:
+    email_text = email_text[candidate_start.start():]
+
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
