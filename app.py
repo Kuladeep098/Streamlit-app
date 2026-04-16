@@ -47,7 +47,8 @@ candidate_text = parts[1] if len(parts) > 1 else email_text
 
 # SAFE FIELD EXTRACTION
 def extract(field, text):
-    match = re.search(rf"{field}\s*:\s*(.*)", text, re.IGNORECASE)
+    pattern = rf"{field}\s*[:\-]\s*(.+)"
+    match = re.search(pattern, text, re.IGNORECASE)
     return match.group(1).strip() if match else ""
 
 
