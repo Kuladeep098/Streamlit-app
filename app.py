@@ -1,14 +1,13 @@
 import streamlit as st
-from google import genai
 from docxtpl import DocxTemplate
-import json, re
+import re
 from datetime import datetime, timedelta
 import holidays
 from dateutil import parser
-import os
+import pytz
 
 # ================= UI =================
-st.title("📄 TCS Profile Generator (AI + Smart Parsing)")
+st.title("📄 TCS Profile Generator")
 
 email_text = st.text_area("Paste Candidate Email", height=300)
 
@@ -80,51 +79,13 @@ if st.button("Generate TCS Profile"):
         st.warning("Please paste email")
         st.stop()
 
-    # ---------- Try Gemini ----------
-    try:
-        os.environ["GOOGLE_API_KEY"] = st.secrets.get("GOOGLE_API_KEY", "")
-
-        client = genai.Client()
-
-        prompt = f"""
-        Extract details and return ONLY JSON.
-
-        {{
-          "Full Name": "",
-          "Contact Number": "",
-          "Email ID": "",
-          "Current Location": "",
-          "Preferred Location": "",
-          "Skills": "",
-          "Experience": "",
-          "Date of Birth": ""
-        }}
-
-        Email:
-        {email_text}
-        """
-
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-
-        text = response.text.strip()
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-
-        if match:
-            data = json.loads(match.group())
-        else:
-            data = smart_extract(email_text)
-
-    except:
-        st.warning("AI not available → using smart extraction")
-        data = smart_extract(email_text)
+    data = smart_extract(email_text)
 
     # ================= CLEAN =================
     name = clean(data.get("Full Name", ""))
-    phone = re.search(r"\d{10}", data.get("Contact Number", ""))
-    phone = phone.group() if phone else ""
+
+    phone_match = re.search(r"\d{10}", data.get("Contact Number", ""))
+    phone = phone_match.group() if phone_match else ""
 
     email = clean(data.get("Email ID", ""))
     location = clean(data.get("Current Location", ""))
@@ -150,20 +111,26 @@ if st.button("Generate TCS Profile"):
     while len(skill_list) < 3:
         skill_list.append(" ")
 
-    # ================= DATES =================
-    now = datetime.now()
+    # ================= DATE LOGIC (FINAL FIX) =================
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+
     india_holidays = holidays.India(years=now.year)
+
+    # DEBUG (optional)
+    st.write("Current IST Time:", now.strftime("%d-%b-%Y %I:%M %p"))
 
     dates = []
 
-# 🔥 FIX: reset time to 00:00
+    # Reset to start of day
     current = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-# Skip today if after 2 PM
-    if now.hour >= 14:
+    # Cutoff time 2 PM
+    cutoff = now.replace(hour=14, minute=0, second=0, microsecond=0)
+
+    if now > cutoff:
         current += timedelta(days=1)
 
-# Generate 3 working days
     while len(dates) < 3:
         if current.weekday() < 5 and current.date() not in india_holidays:
             dates.append(current.strftime("%d-%b-%Y"))
