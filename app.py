@@ -155,11 +155,15 @@ if st.button("Generate TCS Profile"):
     india_holidays = holidays.India(years=now.year)
 
     dates = []
-    current = now
 
-    if current.hour >= 14:
+# 🔥 FIX: reset time to 00:00
+    current = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+# Skip today if after 2 PM
+    if now.hour >= 14:
         current += timedelta(days=1)
 
+# Generate 3 working days
     while len(dates) < 3:
         if current.weekday() < 5 and current.date() not in india_holidays:
             dates.append(current.strftime("%d-%b-%Y"))
