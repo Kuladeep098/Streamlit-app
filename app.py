@@ -1,120 +1,173 @@
 import streamlit as st
+from google import genai
 from docxtpl import DocxTemplate
-import re
+import json, re
 from datetime import datetime, timedelta
 import holidays
-from dateutil import parser   # NEW (auto date parsing)
+from dateutil import parser
+import os
 
-st.title("TCS Profile Generator")
+# ================= UI =================
+st.title("📄 TCS Profile Generator (AI + Smart Parsing)")
 
-email_text = st.text_area("Paste Candidate Email")
+email_text = st.text_area("Paste Candidate Email", height=300)
 
-if not email_text.strip():
-    st.warning("Please paste candidate email.")
-    st.stop()
+# ================= CLEAN =================
+def clean(x):
+    return re.sub(r"\s+", " ", x).strip() if x else ""
 
+# ================= BEST MATCH =================
+def get_best_match(pattern, text):
+    matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
 
-# CLEAN EMAIL
-def clean_email(text):
-    stop_words = [
-        "Warm Regards",
-        "Thanks & Regards",
-        "Best Regards",
-        "Regards",
-        "Kind Regards",
-    ]
+    for m in matches:
+        if isinstance(m, tuple):
+            m = m[0]
 
-    for word in stop_words:
-        if word in text:
-            text = text.split(word)[0]
+        value = m.strip()
+        if value and value.lower() not in ["na", "n/a", "-", ""]:
+            return value
+    return ""
 
-    return text
+# ================= REGEX =================
+def smart_extract(text):
 
+    name = clean(get_best_match(
+        r"Full Name\s*\(As per Aadhar\)\s*:\s*(.*?)\s*(?=Contact Number)", text
+    ))
 
-email_text = clean_email(email_text)
+    phone = get_best_match(r"Contact Number\s*:\s*(\d{10})", text)
 
+    email = clean(get_best_match(
+        r"Email ID\s*:\s*([\w\.-]+@[\w\.-]+)", text
+    ))
 
-# SAFE FIELD EXTRACTION
-def extract(field, text):
-    match = re.search(rf"^{field}\s*:\s*(.*)", text, re.MULTILINE | re.IGNORECASE)
-    return match.group(1).strip() if match else ""
+    dob_raw = clean(get_best_match(
+        r"Date of Birth\s*:\s*([0-9/\- ]{8,15})", text
+    ))
 
+    location = clean(get_best_match(
+        r"Current Location\s*:\s*(.*?)\s*(?=Preferred Location|Compliance|$)", text
+    ))
 
+    pref_location = clean(get_best_match(
+        r"Preferred Location\s*:\s*(.*?)\s*(?=Compliance|$)", text
+    ))
+
+    skills = clean(get_best_match(
+        r"Skill Set\s*:\s*(.*?)\s*(Total Experience|Relevant Experience)", text
+    ))
+
+    exp = clean(get_best_match(
+        r"Relevant Experience\s*:\s*([0-9\+\s]*(?:Years|Year|yrs|yr))", text
+    ))
+
+    return {
+        "Full Name": name,
+        "Contact Number": phone,
+        "Email ID": email,
+        "Current Location": location,
+        "Preferred Location": pref_location,
+        "Skills": skills,
+        "Experience": exp,
+        "Date of Birth": dob_raw,
+    }
+
+# ================= BUTTON =================
 if st.button("Generate TCS Profile"):
 
-    name = extract(r"Full Name \(As per Aadhar\)", email_text)
+    if not email_text.strip():
+        st.warning("Please paste email")
+        st.stop()
 
-    phone = extract("Contact Number", email_text)
-    phone_match = re.search(r"\d{10}", phone)
-    phone = phone_match.group() if phone_match else ""
+    # ---------- Try Gemini ----------
+    try:
+        os.environ["GOOGLE_API_KEY"] = st.secrets.get("GOOGLE_API_KEY", "")
 
-    email = extract("Email ID", email_text)
+        client = genai.Client()
 
-    location = extract("Current Location", email_text)
+        prompt = f"""
+        Extract details and return ONLY JSON.
 
-    pref_location = extract("Preferred Location", email_text)
+        {{
+          "Full Name": "",
+          "Contact Number": "",
+          "Email ID": "",
+          "Current Location": "",
+          "Preferred Location": "",
+          "Skills": "",
+          "Experience": "",
+          "Date of Birth": ""
+        }}
 
-    notice = extract("Notice Period", email_text)
+        Email:
+        {email_text}
+        """
 
-    skills = extract("Skill Set", email_text)
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
 
-    dob = extract("Date of Birth", email_text)
+        text = response.text.strip()
+        match = re.search(r"\{.*\}", text, re.DOTALL)
 
+        if match:
+            data = json.loads(match.group())
+        else:
+            data = smart_extract(email_text)
 
-    # SKILL PROCESSING
-    if skills:
-        skill_list = [s.strip() for s in re.split(r",|/|;", skills) if s.strip()]
-    else:
-        skill_list = []
+    except:
+        st.warning("AI not available → using smart extraction")
+        data = smart_extract(email_text)
+
+    # ================= CLEAN =================
+    name = clean(data.get("Full Name", ""))
+    phone = re.search(r"\d{10}", data.get("Contact Number", ""))
+    phone = phone.group() if phone else ""
+
+    email = clean(data.get("Email ID", ""))
+    location = clean(data.get("Current Location", ""))
+    pref_location = clean(data.get("Preferred Location", ""))
+    exp = clean(data.get("Experience", ""))
+
+    # ================= DOB =================
+    dob_raw = clean(data.get("Date of Birth", ""))
+    dob_match = re.search(r"\d{2}[/\-]\d{2}[/\-]\d{4}", dob_raw)
+    dob = dob_match.group() if dob_match else ""
+
+    mmdd = ""
+    if dob:
+        try:
+            mmdd = parser.parse(dob, dayfirst=True).strftime("%m%d")
+        except:
+            pass
+
+    # ================= SKILLS =================
+    skills_raw = data.get("Skills", "")
+    skill_list = [s.strip().title() for s in re.split(r",|/|\n|;", skills_raw) if s.strip()]
 
     while len(skill_list) < 3:
         skill_list.append(" ")
 
-
-    # EXPERIENCE
-    exp = extract("Relevant Experience", email_text)
-    if not exp:
-        exp = extract("Total Experience", email_text)
-
-
+    # ================= DATES =================
     now = datetime.now()
     india_holidays = holidays.India(years=now.year)
 
     dates = []
     current = now
-    hour = now.hour
 
-
-    if current.weekday() < 5 and current.date() not in india_holidays:
-
-        if hour < 10:
-            dates.append(current.strftime("%d-%b-%Y"))
-            time1 = "10:00AM-06:00PM"
-
-        elif hour < 14:
-            dates.append(current.strftime("%d-%b-%Y"))
-            time1 = "02:00PM-06:00PM"
-
-        else:
-            current += timedelta(days=1)
-            time1 = "10:00AM-06:00PM"
-
-    else:
+    if current.hour >= 14:
         current += timedelta(days=1)
-        time1 = "10:00AM-06:00PM"
-
 
     while len(dates) < 3:
-
-        if current.weekday() >= 5 or current.date() in india_holidays:
-            current += timedelta(days=1)
-            continue
-
-        dates.append(current.strftime("%d-%b-%Y"))
+        if current.weekday() < 5 and current.date() not in india_holidays:
+            dates.append(current.strftime("%d-%b-%Y"))
         current += timedelta(days=1)
 
+    time1 = "10:00AM-06:00PM"
 
-    # LOAD TEMPLATE
+    # ================= DOCX =================
     doc = DocxTemplate("tcs_template.docx")
 
     context = {
@@ -139,41 +192,15 @@ if st.button("Generate TCS Profile"):
         "NEXT_DATE1": dates[0],
         "NEXT_DATE2": dates[1],
         "NEXT_DATE3": dates[2],
-
         "TIME": time1,
     }
 
     doc.render(context)
 
-
-    # DOB → MMDD (SMART VERSION)
-    mmdd = ""
-
-    if dob:
-        try:
-            date_obj = parser.parse(dob)
-            mmdd = date_obj.strftime("%m%d")
-        except:
-            mmdd = ""
-
-
-    # CLEAN NAME
-    clean = re.sub(r'[^A-Za-z0-9]', '', name)
-
-    if not clean:
-        clean = "Profile"
-
-
-    # FILE NAME
-    file_name = f"PTN_IN_RGSID_{clean}{mmdd}.docx"
-
+    file_name = f"PTN_IN_RGSID_{re.sub(r'[^A-Za-z0-9]', '', name)}{mmdd}.docx"
     doc.save(file_name)
 
+    with open(file_name, "rb") as f:
+        st.download_button("Download TCS Profile", f, file_name)
 
-    # DOWNLOAD BUTTON
-    with open(file_name, "rb") as file:
-        st.download_button(
-            label="Download TCS Profile",
-            data=file,
-            file_name=file_name
-        )
+    st.success("✅ Profile Generated Successfully")
