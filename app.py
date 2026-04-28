@@ -117,9 +117,6 @@ if st.button("Generate TCS Profile"):
 
     india_holidays = holidays.India(years=now.year)
 
-    # DEBUG (optional)
-    st.write("Current IST Time:", now.strftime("%d-%b-%Y %I:%M %p"))
-
     dates = []
 
     # Reset to start of day
