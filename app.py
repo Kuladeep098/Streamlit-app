@@ -11,6 +11,11 @@ st.title("📄 TCS Profile Generator")
 
 email_text = st.text_area("Paste Candidate Email", height=300)
 
+tracker_format = st.text_input(
+    "Paste Tracker Columns (TAB separated)",
+    placeholder="Dates\tBeeline ID\tCandidate Name\tContact Number\tEmail ID\tSkill\tTotal Exp"
+)
+
 # ================= CLEAN =================
 def clean(x):
     return re.sub(r"\s+", " ", x).strip() if x else ""
@@ -172,3 +177,41 @@ if st.button("Generate TCS Profile"):
         st.download_button("Download TCS Profile", f, file_name)
 
     st.success("✅ Profile Generated Successfully")
+
+
+        # ================= TRACKER =================
+    if tracker_format:
+
+        tracker_cols = tracker_format.split("\t")
+
+        def get_value(col):
+            col = col.lower().strip()
+
+            if "name" in col:
+                return name
+            elif "contact" in col or "phone" in col:
+                return phone
+            elif "email" in col:
+                return email
+            elif "skill" in col:
+                return ", ".join(skill_list)
+            elif "total exp" in col:
+                return exp
+            elif "rel exp" in col:
+                return exp
+            elif "current location" in col:
+                return location
+            elif "pref" in col:
+                return pref_location
+            elif "dob" in col or "birth" in col:
+                return dob
+            elif "date" in col:
+                return datetime.now().strftime("%d-%m-%Y")
+            else:
+                return ""
+
+        row = [get_value(c) for c in tracker_cols]
+        tracker_line = "\t".join(row)
+
+        st.subheader("📊 Tracker Output (Copy Paste)")
+        st.code(tracker_line)
