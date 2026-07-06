@@ -9,7 +9,7 @@ import pytz
 # ================= UI =================
 st.title("📄 TCS Profile Generator")
 
-email_text = st.text_area("Paste Candidate Email", height=300)
+email_text = st.text_area("Paste Candidate Email / Naukri / Resdex Data", height=300)
 
 tracker_format = st.text_input(
     "Paste Tracker Columns (TAB separated)",
@@ -77,14 +77,142 @@ def smart_extract(text):
         "Date of Birth": dob_raw,
     }
 
+# ================= NAUKRI / RESDEX EXTRACT =================
+def first_phone(text):
+    m = re.search(r"(?<!\d)(?:\+91[\s\-]?)?([6-9]\d{9})(?!\d)", text)
+    return m.group(1) if m else ""
+
+def first_email(text):
+    m = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", text)
+    return m.group(0) if m else ""
+
+def name_from_lines(text):
+    ignore = [
+        "naukri", "resdex", "profile", "candidate", "contact", "email",
+        "phone", "mobile", "location", "experience", "skills", "key skills",
+        "education", "employment", "attached cv", "verified", "active",
+        "modified", "save", "forward", "schedule", "notice", "summary",
+        "may also know", "work experience", "current location",
+        "preferred location"
+    ]
+
+    lines = [clean(x) for x in text.splitlines() if clean(x)]
+
+    for line in lines[:40]:
+        low = line.lower()
+
+        if any(word in low for word in ignore):
+            continue
+
+        if "@" in line or re.search(r"\d{5,}", line):
+            continue
+
+        if re.fullmatch(r"[A-Za-z][A-Za-z .']{2,70}", line):
+            words = line.split()
+            if 2 <= len(words) <= 5:
+                return line.title()
+
+    return ""
+
+def naukri_extract(text):
+
+    name = clean(get_best_match(
+        r"(?:Candidate Name|Full Name|Name)\s*[:\-]\s*([A-Za-z][A-Za-z .']{2,80})",
+        text
+    ))
+
+    if not name:
+        name = name_from_lines(text)
+
+    phone = first_phone(text)
+    email = first_email(text)
+
+    location = clean(get_best_match(
+        r"(?:Current Location|Current\s*Location|Location)\s*[:\-]?\s*([^\n\r]+)",
+        text
+    ))
+
+    pref_location = clean(get_best_match(
+        r"(?:Preferred Location|Preferred\s*Work\s*Location|Pref\.?\s*Location)\s*[:\-]?\s*([^\n\r]+)",
+        text
+    ))
+
+    # fallback city detection
+    if not location:
+        location = clean(get_best_match(
+            r"\b(Bengaluru|Bangalore|Hyderabad|Chennai|Pune|Mumbai|Delhi|Noida|Gurgaon|Gurugram|Kolkata|Remote)\b",
+            text
+        ))
+
+    skills_raw = clean(get_best_match(
+        r"(?:Key Skills|Keyskills|Skill Set|Skills)\s*[:\-]?\s*(.*?)\s*(?=May also know|Work Summary|Profile Summary|Employment|Education|Activity|Attached CV|Notice|Preferred Location|Current Location|$)",
+        text
+    ))
+
+    if not skills_raw:
+        skills_raw = clean(get_best_match(
+            r"(?:May also know)\s*[:\-]?\s*(.*?)\s*(?=Work Summary|Profile Summary|Employment|Education|Activity|Attached CV|$)",
+            text
+        ))
+
+    exp = clean(get_best_match(
+        r"(?:Total Experience|Total Exp|Experience)\s*[:\-]?\s*([0-9]{1,2}(?:\.[0-9])?\+?\s*(?:Years?|Yrs?|Yr|year\(s\))(?:\s*[0-9]{1,2}\s*(?:Months?|Mos?|M))?)",
+        text
+    ))
+
+    if not exp:
+        exp = clean(get_best_match(
+            r"\b([0-9]{1,2}\+?\s*(?:Years?|Yrs?|Yr))\b",
+            text
+        ))
+
+    dob_raw = clean(get_best_match(
+        r"(?:Date of Birth|DOB|D\.O\.B)\s*[:\-]?\s*([0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{2,4})",
+        text
+    ))
+
+    return {
+        "Full Name": name,
+        "Contact Number": phone,
+        "Email ID": email,
+        "Current Location": location,
+        "Preferred Location": pref_location,
+        "Skills": skills_raw,
+        "Experience": exp,
+        "Date of Birth": dob_raw,
+    }
+
+# ================= AUTO EXTRACT =================
+def auto_extract(text):
+    normal_data = smart_extract(text)
+    naukri_data = naukri_extract(text)
+
+    final = {}
+
+    fields = [
+        "Full Name",
+        "Contact Number",
+        "Email ID",
+        "Current Location",
+        "Preferred Location",
+        "Skills",
+        "Experience",
+        "Date of Birth",
+    ]
+
+    for key in fields:
+        final[key] = normal_data.get(key) or naukri_data.get(key) or ""
+
+    return final
+
 # ================= BUTTON =================
 if st.button("Generate TCS Profile"):
 
     if not email_text.strip():
-        st.warning("Please paste email")
+        st.warning("Please paste email / Naukri / Resdex data")
         st.stop()
 
-    data = smart_extract(email_text)
+    data = auto_extract(email_text)
 
     # ================= CLEAN =================
     name = clean(data.get("Full Name", ""))
@@ -99,7 +227,7 @@ if st.button("Generate TCS Profile"):
 
     # ================= DOB =================
     dob_raw = clean(data.get("Date of Birth", ""))
-    dob_match = re.search(r"\d{2}[/\-]\d{2}[/\-]\d{4}", dob_raw)
+    dob_match = re.search(r"\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}", dob_raw)
     dob = dob_match.group() if dob_match else ""
 
     mmdd = ""
@@ -116,7 +244,10 @@ if st.button("Generate TCS Profile"):
     while len(skill_list) < 3:
         skill_list.append(" ")
 
-    # ================= DATE LOGIC (FINAL FIX) =================
+    # only first 3 skills
+    skill_list = skill_list[:3]
+
+    # ================= DATE LOGIC =================
     ist = pytz.timezone("Asia/Kolkata")
     now = datetime.now(ist)
 
@@ -124,10 +255,8 @@ if st.button("Generate TCS Profile"):
 
     dates = []
 
-    # Reset to start of day
     current = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # Cutoff time 2 PM
     cutoff = now.replace(hour=14, minute=0, second=0, microsecond=0)
 
     if now > cutoff:
@@ -178,8 +307,7 @@ if st.button("Generate TCS Profile"):
 
     st.success("✅ Profile Generated Successfully")
 
-
-        # ================= TRACKER =================
+    # ================= TRACKER =================
     if tracker_format:
 
         tracker_cols = tracker_format.split("\t")
