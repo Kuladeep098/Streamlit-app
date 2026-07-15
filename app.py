@@ -18,7 +18,19 @@ tracker_format = st.text_input(
 
 # ================= CLEAN =================
 def clean(x):
+    """Collapses ALL whitespace (including newlines) into single spaces.
+    Use this only on values where line breaks carry no meaning."""
     return re.sub(r"\s+", " ", x).strip() if x else ""
+
+def soft_clean(x):
+    """Collapses horizontal whitespace (spaces/tabs) but PRESERVES newlines.
+    Use this for any field (like Key Skills) where each line is a separate item -
+    calling clean() on it before splitting destroys the line breaks the split relies on."""
+    if not x:
+        return ""
+    x = x.strip()
+    x = re.sub(r"[ \t]+", " ", x)
+    return x
 
 # ================= BEST MATCH =================
 def get_best_match(pattern, text):
@@ -58,7 +70,8 @@ def smart_extract(text):
         r"Preferred Location\s*:\s*(.*?)\s*(?=Compliance|$)", text
     ))
 
-    skills = clean(get_best_match(
+    # FIX: use soft_clean so individual skills (newline separated) survive to the split step
+    skills = soft_clean(get_best_match(
         r"Skill Set\s*:\s*(.*?)\s*(Total Experience|Relevant Experience)", text
     ))
 
@@ -144,25 +157,42 @@ def naukri_extract(text):
             text
         ))
 
-    skills_raw = clean(get_best_match(
+    # FIX (bug #1): was clean(...) -> destroyed the newlines that separate each
+    # skill in a "Key skills" block, so the whole block became a single skill.
+    # soft_clean() keeps line breaks intact so the later split on "\n" actually works.
+    skills_raw = soft_clean(get_best_match(
         r"(?:Key Skills|Keyskills|Skill Set|Skills)\s*[:\-]?\s*(.*?)\s*(?=May also know|Work Summary|Profile Summary|Employment|Education|Activity|Attached CV|Notice|Preferred Location|Current Location|$)",
         text
     ))
 
     if not skills_raw:
-        skills_raw = clean(get_best_match(
+        skills_raw = soft_clean(get_best_match(
             r"(?:May also know)\s*[:\-]?\s*(.*?)\s*(?=Work Summary|Profile Summary|Employment|Education|Activity|Attached CV|$)",
             text
         ))
 
+    # ---- Experience: try labeled "Total Experience"/"Experience" value first ----
     exp = clean(get_best_match(
-        r"(?:Total Experience|Total Exp|Experience)\s*[:\-]?\s*([0-9]{1,2}(?:\.[0-9])?\+?\s*(?:Years?|Yrs?|Yr|year\(s\))(?:\s*[0-9]{1,2}\s*(?:Months?|Mos?|M))?)",
+        r"(?:Total Experience|Total Exp|Experience)\s*[:\-]?\s*([0-9]{1,2}(?:\.[0-9]{1,2})?\+?\s*(?:Years?|Yrs?|Yr)(?:\s*[0-9]{1,2}\s*(?:Months?|Mos?|M))?)",
         text
     ))
 
+    # FIX (bug #2, new): Naukri/Resdex profiles show total experience in a compact
+    # "5y 10m" form near the top (no "Years"/"Yr" word at all), before any CTC figure.
+    # Catch that explicitly, before falling back to the loose generic pattern below.
     if not exp:
         exp = clean(get_best_match(
-            r"\b([0-9]{1,2}\+?\s*(?:Years?|Yrs?|Yr))\b",
+            r"\b([0-9]{1,2}\s*y\s*[0-9]{1,2}\s*m)\b",
+            text
+        ))
+
+    # FIX (bug #2): original fallback pattern had no decimal support, so on text like
+    # "5.1 years" it matched starting *after* the decimal point ("1 years"), silently
+    # dropping the "5". The (?<!\.) lookbehind stops it from starting a match right
+    # after a decimal point.
+    if not exp:
+        exp = clean(get_best_match(
+            r"(?<!\.)\b([0-9]{1,2}\+?\s*(?:Years?|Yrs?|Yr))\b",
             text
         ))
 
@@ -205,6 +235,10 @@ def auto_extract(text):
 
     return final
 
+# Naukri/Resdex UI artifacts that sometimes get swept into the skills block
+# (e.g. a "View IT skills" link sitting right after the last real skill line).
+NOISE_SKILLS = {"view it skills", "view more", "show more", "view all", "view it skill"}
+
 # ================= BUTTON =================
 if st.button("Generate TCS Profile"):
 
@@ -238,8 +272,11 @@ if st.button("Generate TCS Profile"):
             pass
 
     # ================= SKILLS =================
+    # FIX: skills_raw now still has its newlines (see soft_clean above), so this
+    # split actually separates the individual skills instead of returning one blob.
     skills_raw = data.get("Skills", "")
     skill_list = [s.strip().title() for s in re.split(r",|/|\n|;", skills_raw) if s.strip()]
+    skill_list = [s for s in skill_list if s.lower() not in NOISE_SKILLS]
 
     while len(skill_list) < 3:
         skill_list.append(" ")
