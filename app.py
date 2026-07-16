@@ -63,8 +63,11 @@ def smart_extract(text):
     ))
 
     location = clean(get_best_match(
-        r"Current Location\s*:\s*(.*?)\s*(?=Preferred Location|Compliance|$)", text
+        r"\bCurrent\s*Location\b\s*[:\-]?\s*([^\n\r]+)",
+        text
     ))
+
+    # Reject invalid values
 
     pref_location = clean(get_best_match(
         r"Preferred Location\s*:\s*(.*?)\s*(?=Compliance|$)", text
@@ -144,18 +147,30 @@ def naukri_extract(text):
         r"(?:Current Location|Current\s*Location|Location)\s*[:\-]?\s*([^\n\r]+)",
         text
     ))
+    if (
+        len(location) < 3
+        or location.lower() in ["s", "na", "n/a", "-", "none"]
+        or not re.search(r"[A-Za-z]{3,}", location)
+    ):
+        location = ""
 
     pref_location = clean(get_best_match(
-        r"(?:Preferred Location|Preferred\s*Work\s*Location|Pref\.?\s*Location)\s*[:\-]?\s*([^\n\r]+)",
+        r"Pref\.?\s*locations\s*(.*?)\s*(?=\n\d{10}|\nCall candidate|\nWhatsApp|\n\d{4}\n|\nModified|\nActive)",
         text
     ))
+    pref_location = pref_location.replace("\n", ", ")
+    pref_location = re.sub(r",\s*,", ",", pref_location)
+    pref_location = re.sub(r"\s+", " ", pref_location)
 
     # fallback city detection
     if not location:
-        location = clean(get_best_match(
-            r"\b(Bengaluru|Bangalore|Hyderabad|Chennai|Pune|Mumbai|Delhi|Noida|Gurgaon|Gurugram|Kolkata|Remote)\b",
-            text
-        ))
+        m = re.search(
+        r"₹.*?\n([A-Za-z ]+)\nPrevious",
+        text,
+        re.DOTALL
+    )
+        if m:
+            location = clean(m.group(1))
 
     # FIX (bug #1): was clean(...) -> destroyed the newlines that separate each
     # skill in a "Key skills" block, so the whole block became a single skill.
