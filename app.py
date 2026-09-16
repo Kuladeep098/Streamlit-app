@@ -833,7 +833,13 @@ def extract_reason(text):
         text
     )
 
+def extract_notice_period(text):
+    """
+    Always display Immediate Joiner in the TCS profile.
+    """
 
+    return "Immediate Joiner"
+    
 def naukri_extract(text):
 
     name = extract_naukri_name(text)
