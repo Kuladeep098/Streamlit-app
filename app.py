@@ -499,57 +499,70 @@ def smart_extract(text):
 
 def extract_naukri_name(text):
 
-    # Markdown heading:
+    # --------------------------------------------------------
+    # 1. Naukri profile heading
+    # Example:
     # # Nuthan
-    match = re.search(
+    # --------------------------------------------------------
+
+    matches = re.findall(
         r"(?m)^#+\s*([A-Za-z][A-Za-z .'\-]{1,70})\s*$",
         text
     )
 
-    if match:
+    for value in matches:
 
-        candidate_name = clean(match.group(1))
+        value = clean(value)
 
-        if candidate_name.lower() not in {
-            "naukri",
+        if value.lower() in {
+            "jobs responses",
+            "resdex",
+            "ai rex",
+            "premiumx",
+            "reports",
+            "search",
             "profile",
-            "candidate",
-            "save",
-            "resdex"
+            "save"
         }:
-            return candidate_name.title()
+            continue
 
-    # Explicit name label
+        if re.fullmatch(
+            r"[A-Za-z][A-Za-z .'\-]{1,70}",
+            value
+        ):
+            return value.title()
+
+    # --------------------------------------------------------
+    # 2. Explicit name
+    # --------------------------------------------------------
+
     name = get_best_match(
-        r"(?:Candidate Name|Full Name|Name)\s*[:\-]\s*([A-Za-z][A-Za-z .'\-]{1,80})",
+        r"(?:Candidate Name|Full Name|Name)\s*[:\-]\s*"
+        r"([A-Za-z][A-Za-z .'\-]{1,80})",
         text
     )
 
     if name:
         return name.title()
 
-    return name_from_lines(text)
-
+    return ""
 
 def extract_naukri_location(text):
 
-    # Primary Naukri header format:
+    # --------------------------------------------------------
+    # Naukri header format
     #
-    # 4y 7m
-    # ₹ 10 Lacs
+    # ₹ 10 Lacs (expects: ₹ 13 Lacs)
     # Bengaluru
     # CurrentSenior Cloud Engineer...
-
-    pattern = (
-        r"(?:₹\s*[\d,.]+\s*Lacs?|₹\s*[\d,.]+\s*Lakhs?)"
-        r"\s*\n\s*"
-        r"([A-Za-z][A-Za-z .&/\-]{2,60})"
-        r"\s*\n\s*"
-        r"Current"
-    )
+    # --------------------------------------------------------
 
     match = re.search(
-        pattern,
+        r"₹\s*[\d,.]+\s*Lacs?"
+        r"(?:\s*\(.*?\))?"
+        r"\s*\n\s*"
+        r"([A-Za-z][A-Za-z .&/\-]{2,50})"
+        r"\s*\n\s*Current",
         text,
         re.IGNORECASE
     )
@@ -558,29 +571,30 @@ def extract_naukri_location(text):
 
         location = clean(match.group(1))
 
-        if (
-            location
-            and location.lower() not in {
-                "previous",
-                "current",
-                "profile",
-                "save"
-            }
-        ):
+        # Safety checks
+        if location.lower() not in {
+            "previous",
+            "current",
+            "save",
+            "profile"
+        }:
             return location
 
+    # --------------------------------------------------------
     # Explicit Current Location
-    location = get_best_match(
-        r"(?:Current Location|Current\s*Location|Location)\s*[:\-]?\s*([^\n\r]+)",
-        text
+    # --------------------------------------------------------
+
+    match = re.search(
+        r"Current\s*Location\s*[:\-]?\s*([^\n\r]+)",
+        text,
+        re.IGNORECASE
     )
 
-    if location:
+    if match:
 
-        location = clean(location)
+        location = clean(match.group(1))
 
         if location.lower() not in {
-            "s",
             "na",
             "n/a",
             "-",
@@ -590,29 +604,52 @@ def extract_naukri_location(text):
 
     return ""
 
-
 def extract_preferred_locations(text):
 
-    # Format:
+    # --------------------------------------------------------
+    # Naukri format:
+    #
     # Pref. locationsBengaluru, Remote, Chennai, Pune, Hyderabad
+    #
+    # Stop before phone number / Call candidate / WhatsApp
+    # --------------------------------------------------------
+
     match = re.search(
-        r"Pref\.?\s*locations?\s*[:\-]?\s*(.*?)(?=\n\s*(?:View phone number|Call candidate|WhatsApp|Modified|Active|CVModified|Enterprise Exclusive|AI summary|Profile detail|Attached CV|Key skills|Work summary)|$)",
+        r"Pref\.?\s*locations?\s*[:\-]?\s*"
+        r"(.+?)"
+        r"(?=\n\s*(?:\*{0,2})?(?:[6-9]\d{9})\s*\(M\)"
+        r"|"
+        r"\n\s*(?:\*{0,2})?Call candidate"
+        r"|"
+        r"\n\s*(?:\*{0,2})?WhatsApp"
+        r"|"
+        r"\n\s*(?:\*{0,2})?View phone number"
+        r"|$)",
         text,
         re.IGNORECASE | re.DOTALL
     )
 
     if match:
 
-        value = soft_clean(match.group(1))
+        value = match.group(1)
 
-        # Convert line breaks to comma
+        # Remove phone if it somehow entered the match
+        value = re.sub(
+            r",?\s*[6-9]\d{9}\s*\(M\)",
+            "",
+            value
+        )
+
+        value = value.replace("**", "")
+
+        # Newlines -> comma
         value = re.sub(
             r"\s*\n\s*",
             ", ",
             value
         )
 
-        # Clean duplicate commas
+        # Duplicate commas
         value = re.sub(
             r",\s*,+",
             ", ",
@@ -621,9 +658,13 @@ def extract_preferred_locations(text):
 
         return clean(value)
 
-    # TCS-style format
+    # --------------------------------------------------------
+    # TCS format
+    # --------------------------------------------------------
+
     value = get_best_match(
-        r"Preferred Location\s*:\s*(.*?)\s*(?=Compliance|Notice Period|Offers|$)",
+        r"Preferred Location\s*:\s*(.*?)"
+        r"(?=Compliance|Notice Period|Offers|$)",
         text
     )
 
@@ -632,27 +673,36 @@ def extract_preferred_locations(text):
 
 def extract_naukri_skills(text):
 
-    patterns = [
+    # --------------------------------------------------------
+    # Locate Key Skills section without destroying newlines
+    # --------------------------------------------------------
 
-        r"(?:Key Skills|Keyskills|Skill Set|Skills)\s*[:\-]?\s*(.*?)\s*(?=May also know|Work Summary|Profile Summary|Employment|Education|Activity|Attached CV|Notice|Preferred Location|Current Location|Industry|Department|Role|$)",
+    match = re.search(
+        r"(?:##\s*)?Key skills\s*"
+        r"(.*?)"
+        r"(?=\n\s*(?:\[.*?View IT skills.*?\])?"
+        r"\s*(?:May also know|##\s*May also know|Work summary|"
+        r"##\s*Work summary|Profile Summary|Employment|Education|Activity|$))",
+        text,
+        re.IGNORECASE | re.DOTALL
+    )
 
-        r"(?:May also know)\s*[:\-]?\s*(.*?)\s*(?=Work Summary|Profile Summary|Employment|Education|Activity|Attached CV|$)"
-    ]
+    if not match:
+        return ""
 
-    skills_raw = ""
+    skills_block = match.group(1)
 
-    for pattern in patterns:
+    # Remove markdown bold
+    skills_block = skills_block.replace("**", "")
 
-        value = get_best_match(
-            pattern,
-            text
-        )
+    # Remove markdown links
+    skills_block = re.sub(
+        r"\[([^\]]+)\]\([^)]+\)",
+        r"\1",
+        skills_block
+    )
 
-        if value:
-            skills_raw = soft_clean(value)
-            break
-
-    return skills_raw
+    return skills_block.strip()
 
 
 def extract_naukri_experience(text):
@@ -692,51 +742,76 @@ def extract_naukri_experience(text):
 
 def extract_dob(text):
 
+    # --------------------------------------------------------
+    # 1. Explicit format
+    # --------------------------------------------------------
+
     patterns = [
 
-        # 16 Sep 1994
-        r"(?:Date of Birth|DOB|D\.O\.B)\s*[:\-]?\s*([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})",
+        # Date of Birth: 16 Sep 1994
+        r"(?:Date of Birth|DOB|D\.O\.B)"
+        r"\s*[:\-]?\s*"
+        r"([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})",
 
-        # 16 September 1994
-        r"(?:Date of Birth|DOB|D\.O\.B)\s*[:\-]?\s*([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})",
-
-        # 16/09/1994 or 16-09-1994
-        r"(?:Date of Birth|DOB|D\.O\.B)\s*[:\-]?\s*([0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{2,4})",
+        # Date of Birth: 16/09/1994
+        r"(?:Date of Birth|DOB|D\.O\.B)"
+        r"\s*[:\-]?\s*"
+        r"([0-9]{1,2}[\/\-][0-9]{1,2}[\/\-][0-9]{2,4})",
     ]
 
     for pattern in patterns:
 
-        value = get_best_match(
+        match = re.search(
             pattern,
-            text
+            text,
+            re.IGNORECASE
         )
 
-        if value:
-            return value
+        if match:
+            return clean(match.group(1))
 
-    return ""
+    # --------------------------------------------------------
+    # 2. Naukri Personal Details table
+    #
+    # Date of Birth | Gender | Marital status | Category
+    # 16 Sep 1994   | Male   | ...
+    # --------------------------------------------------------
 
-
-def extract_notice_period(text):
-
-    # TCS style
-    value = get_best_match(
-        r"Notice Period\s*(?:/ Last Working Date)?\s*:\s*([^\n\r]+)",
-        text
-    )
-
-    if value:
-        return value
-
-    # Naukri header
-    match = re.search(
-        r"\n\s*(Immediate Joiner|Immediate|[0-9]+\s*Days?\s*(?:or less)?|[0-9]+\s*Days?)\s*\n",
+    table_match = re.search(
+        r"Date of Birth.*?"
+        r"\n\s*"
+        r"(?:\*\*)?"
+        r"([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})"
+        r"(?:\*\*)?",
         text,
-        re.IGNORECASE
+        re.IGNORECASE | re.DOTALL
     )
 
-    if match:
-        return clean(match.group(1))
+    if table_match:
+        return clean(
+            table_match.group(1)
+        )
+
+    # --------------------------------------------------------
+    # 3. Markdown table fallback
+    # --------------------------------------------------------
+
+    lines = text.splitlines()
+
+    for i, line in enumerate(lines):
+
+        if "Date of Birth" in line:
+
+            # Look at next few lines
+            for next_line in lines[i + 1:i + 4]:
+
+                match = re.search(
+                    r"\b([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})\b",
+                    next_line
+                )
+
+                if match:
+                    return match.group(1)
 
     return ""
 
@@ -988,42 +1063,99 @@ def extract_top_skills(skills_raw):
 
     skills_raw = skills_raw.replace("**", "")
 
-    # Split on newline, comma, slash, semicolon
-    pieces = re.split(
-        r",|\n|;|/",
-        skills_raw
-    )
+    # --------------------------------------------------------
+    # Split primarily by lines
+    # --------------------------------------------------------
+
+    lines = skills_raw.splitlines()
 
     skill_list = []
 
-    for piece in pieces:
+    for line in lines:
 
-        skill = clean_skill(piece)
+        skill = clean_skill(line)
 
         if not skill:
             continue
 
+        # Remove bullet
+        skill = re.sub(
+            r"^[•\-\*]+\s*",
+            "",
+            skill
+        )
+
+        # Remove View IT skills
         if skill.lower() in NOISE_SKILLS:
             continue
 
-        if len(skill) < 2:
+        # Ignore markdown/UI
+        if skill.lower() in {
+            "view it skills",
+            "view it skill",
+            "view more",
+            "show more",
+            "save"
+        }:
             continue
 
-        # Ignore obvious URL text
         if "http://" in skill.lower():
             continue
 
         if "https://" in skill.lower():
             continue
 
-        # Avoid exact duplicates
-        if skill.lower() not in [
-            x.lower() for x in skill_list
-        ]:
-            skill_list.append(skill)
+        # If a line contains | separators
+        parts = re.split(
+            r"\|",
+            skill
+        )
+
+        for part in parts:
+
+            part = clean_skill(part)
+
+            if not part:
+                continue
+
+            if part.lower() in NOISE_SKILLS:
+                continue
+
+            # Avoid duplicates
+            if part.lower() not in [
+                x.lower() for x in skill_list
+            ]:
+                skill_list.append(part)
+
+    # --------------------------------------------------------
+    # If lines were flattened, use known skill separators
+    # --------------------------------------------------------
+
+    if len(skill_list) <= 1:
+
+        skill_list = []
+
+        parts = re.split(
+            r",|;|\n|\|",
+            skills_raw
+        )
+
+        for part in parts:
+
+            skill = clean_skill(part)
+
+            if not skill:
+                continue
+
+            if skill.lower() in NOISE_SKILLS:
+                continue
+
+            if skill.lower() not in [
+                x.lower() for x in skill_list
+            ]:
+                skill_list.append(skill)
 
     return skill_list[:3]
-
 
 # ============================================================
 # INTERVIEW DATE LOGIC
@@ -1576,9 +1708,45 @@ if st.button(
             )
         )
 
-    st.success(
-        f"✅ Profile Generated Successfully: {file_name}"
-    )
+    critical_missing = []
+
+    if not name:
+        critical_missing.append("Name")
+
+    if not phone:
+        critical_missing.append("Contact Number")
+
+    if not email:
+        critical_missing.append("Email ID")
+
+    if not location:
+        critical_missing.append("Current Location")
+
+    if not exp:
+        critical_missing.append("Experience")
+
+    if not dob:
+        critical_missing.append("DOB")
+
+    if len(skill_list) < 3:
+        critical_missing.append("Skills")
+
+
+    if critical_missing:
+
+        st.error(
+            "❌ Profile was NOT generated because these fields "
+            "could not be verified: "
+            + ", ".join(critical_missing)
+        )
+
+        st.stop()
+
+    else:
+
+        st.success(
+            f"✅ Profile Generated Successfully: {file_name}"
+        )
 
     # --------------------------------------------------------
     # Tracker
