@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import holidays
 from dateutil import parser
 import pytz
+from pathlib import Path
 
 
 # ============================================================
@@ -21,7 +22,7 @@ st.title("📄 TCS Profile Generator")
 
 
 # ============================================================
-# USER INPUT
+# UI
 # ============================================================
 
 email_text = st.text_area(
@@ -50,32 +51,51 @@ manual_phone = st.text_input(
 def clean(value):
     """
     Collapse whitespace into a single space.
-    Use for normal single-value fields.
+    Suitable for normal single-value fields.
     """
 
-    if not value:
+    if value is None:
         return ""
 
     value = str(value)
 
+    # Remove markdown bold
     value = value.replace("**", "")
 
-    return re.sub(r"\s+", " ", value).strip()
+    # Normalize whitespace
+    value = re.sub(
+        r"\s+",
+        " ",
+        value
+    )
+
+    return value.strip()
 
 
 def soft_clean(value):
     """
-    Clean spaces/tabs but preserve newlines.
+    Preserve line breaks while normalizing spaces/tabs.
     """
 
-    if not value:
+    if value is None:
         return ""
 
     value = str(value)
 
-    value = value.replace("**", "")
+    value = value.replace(
+        "**",
+        ""
+    )
 
-    value = value.strip()
+    value = value.replace(
+        "\r\n",
+        "\n"
+    )
+
+    value = value.replace(
+        "\r",
+        "\n"
+    )
 
     value = re.sub(
         r"[ \t]+",
@@ -83,7 +103,7 @@ def soft_clean(value):
         value
     )
 
-    return value
+    return value.strip()
 
 
 def normalize_input(text):
@@ -96,17 +116,33 @@ def normalize_input(text):
 
     text = str(text)
 
-    text = text.replace("\r\n", "\n")
-    text = text.replace("\r", "\n")
+    text = text.replace(
+        "\r\n",
+        "\n"
+    )
 
-    # Convert escaped @ to normal @
-    text = text.replace(r"\@", "@")
+    text = text.replace(
+        "\r",
+        "\n"
+    )
 
-    # Remove zero-width characters
-    text = text.replace("\u200b", "")
+    # Escaped @ from copied content
+    text = text.replace(
+        r"\@",
+        "@"
+    )
 
-    # Convert non-breaking space
-    text = text.replace("\xa0", " ")
+    # Non-breaking space
+    text = text.replace(
+        "\xa0",
+        " "
+    )
+
+    # Zero-width space
+    text = text.replace(
+        "\u200b",
+        ""
+    )
 
     return text
 
@@ -121,19 +157,22 @@ def get_best_match(
     flags=re.IGNORECASE | re.DOTALL
 ):
     """
-    Return first useful regex match.
+    Safely return first useful regex match.
     """
 
     if not text:
         return ""
 
     try:
+
         matches = re.findall(
             pattern,
             text,
             flags
         )
+
     except re.error:
+
         return ""
 
     for match in matches:
@@ -161,6 +200,7 @@ def get_best_match(
             "none",
             "not available"
         }:
+
             return value
 
     return ""
@@ -171,9 +211,6 @@ def get_best_match(
 # ============================================================
 
 def valid_phone(phone):
-    """
-    Validate Indian mobile number.
-    """
 
     if not phone:
         return ""
@@ -184,13 +221,13 @@ def valid_phone(phone):
         str(phone)
     )
 
-    # 10 digit
+    # 10 digit Indian mobile
     if len(phone) == 10:
 
         if phone[0] in "6789":
             return phone
 
-    # 91XXXXXXXXXX
+    # +91XXXXXXXXXX / 91XXXXXXXXXX
     if len(phone) == 12:
 
         if phone.startswith("91"):
@@ -223,6 +260,7 @@ def valid_email(email):
         pattern,
         email
     ):
+
         return email
 
     return ""
@@ -233,9 +271,6 @@ def valid_email(email):
 # ============================================================
 
 def extract_explicit_phone(text):
-    """
-    Extract phone numbers associated with phone/contact labels.
-    """
 
     if not text:
         return ""
@@ -243,21 +278,33 @@ def extract_explicit_phone(text):
     patterns = [
 
         # Contact Number: 9611481059
-        r"(?:Contact\s*Number|Contact\s*No\.?|"
-        r"Mobile\s*Number|Mobile\s*No\.?|"
-        r"Phone\s*Number|Phone\s*No\.?)"
-        r"\s*[:\-]?\s*"
-        r"(?:\+91[\s\-]?)?"
-        r"([6-9]\d{9})",
+        (
+            r"(?:Contact\s*Number|"
+            r"Contact\s*No\.?|"
+            r"Mobile\s*Number|"
+            r"Mobile\s*No\.?|"
+            r"Phone\s*Number|"
+            r"Phone\s*No\.?)"
+            r"\s*[:\-]?\s*"
+            r"(?:\+91[\s\-]?)?"
+            r"([6-9]\d{9})"
+        ),
 
         # Contact: 9611481059
-        r"(?:Contact|Mobile|Phone)"
-        r"\s*[:\-]\s*"
-        r"(?:\+91[\s\-]?)?"
-        r"([6-9]\d{9})",
+        (
+            r"(?:Contact|Mobile|Phone)"
+            r"\s*[:\-]\s*"
+            r"(?:\+91[\s\-]?)?"
+            r"([6-9]\d{9})"
+        ),
 
         # +91 9611481059
-        r"(?<!\d)\+91[\s\-]?([6-9]\d{9})(?!\d)",
+        (
+            r"(?<!\d)"
+            r"\+91[\s\-]?"
+            r"([6-9]\d{9})"
+            r"(?!\d)"
+        ),
     ]
 
     for pattern in patterns:
@@ -281,14 +328,12 @@ def extract_explicit_phone(text):
 
 
 def extract_naukri_phone(text):
-    """
-    Handles Naukri format:
-
-    9611481059 (M)
-    """
 
     if not text:
         return ""
+
+    # Example:
+    # 9611481059 (M)
 
     match = re.search(
         r"(?<!\d)"
@@ -308,9 +353,6 @@ def extract_naukri_phone(text):
 
 
 def first_phone(text):
-    """
-    Conservative fallback phone extraction.
-    """
 
     if not text:
         return ""
@@ -339,7 +381,9 @@ def first_phone(text):
 
     for candidate in candidates:
 
-        phone = valid_phone(candidate)
+        phone = valid_phone(
+            candidate
+        )
 
         if phone:
             return phone
@@ -369,7 +413,9 @@ def first_email(text):
 
     for email in matches:
 
-        email = valid_email(email)
+        email = valid_email(
+            email
+        )
 
         if email:
             return email
@@ -386,7 +432,7 @@ def name_from_lines(text):
     if not text:
         return ""
 
-    ignore_exact = {
+    ignored = {
         "naukri",
         "resdex",
         "profile",
@@ -422,13 +468,15 @@ def name_from_lines(text):
         "reports",
         "search",
         "jobs responses",
+        "ai rex",
+        "premiumx",
     }
-
-    lines = []
 
     for raw_line in text.splitlines():
 
-        line = clean(raw_line)
+        line = clean(
+            raw_line
+        )
 
         if not line:
             continue
@@ -439,36 +487,13 @@ def name_from_lines(text):
             line
         )
 
-        line = clean(line)
-
-        if line:
-            lines.append(line)
-
-    for line in lines[:50]:
+        line = clean(
+            line
+        )
 
         low = line.lower()
 
-        if low in ignore_exact:
-            continue
-
-        if any(
-            low.startswith(prefix)
-            for prefix in [
-                "current",
-                "profile",
-                "candidate",
-                "attached",
-                "key skills",
-                "work summary",
-                "industry",
-                "department",
-                "role",
-                "education",
-                "save",
-                "naukri",
-                "resdex"
-            ]
-        ):
+        if low in ignored:
             continue
 
         if "@" in line:
@@ -502,7 +527,7 @@ def name_from_lines(text):
 
 
 # ============================================================
-# NORMAL / TCS EMAIL EXTRACTION
+# NORMAL / TCS EXTRACTION
 # ============================================================
 
 def smart_extract(text):
@@ -527,9 +552,13 @@ def smart_extract(text):
             )
         )
 
-    phone = extract_explicit_phone(text)
+    phone = extract_explicit_phone(
+        text
+    )
 
-    email = first_email(text)
+    email = first_email(
+        text
+    )
 
     dob_raw = clean(
         get_best_match(
@@ -560,7 +589,8 @@ def smart_extract(text):
         get_best_match(
             r"Skill Set\s*:\s*(.*?)"
             r"\s*(?=Total Experience|"
-            r"Relevant Experience|Compliance|"
+            r"Relevant Experience|"
+            r"Compliance|"
             r"Notice Period|$)",
             text
         )
@@ -637,7 +667,9 @@ def extract_naukri_name(text):
     if not text:
         return ""
 
-    text = normalize_input(text)
+    text = normalize_input(
+        text
+    )
 
     ignored = {
         "jobs responses",
@@ -649,11 +681,11 @@ def extract_naukri_name(text):
         "profile",
         "save",
         "candidate",
-        "naukri"
+        "naukri",
     }
 
     # --------------------------------------------------------
-    # 1. Naukri Markdown heading
+    # 1. Markdown heading
     #
     # # Nuthan
     # ## Nuthan
@@ -661,9 +693,12 @@ def extract_naukri_name(text):
     # --------------------------------------------------------
 
     heading_pattern = (
-        r"(?m)^\s*\*{0,2}\s*#+\s*"
-        r"([^\n\r#]+?)"
-        r"\s*\*{0,2}\s*$"
+        r"(?m)^\s*"
+        r"\*{0,2}\s*"
+        r"#+\s*"
+        r"([A-Za-z][A-Za-z .'\-]{0,70})"
+        r"\s*"
+        r"\*{0,2}\s*$"
     )
 
     matches = re.findall(
@@ -673,12 +708,9 @@ def extract_naukri_name(text):
 
     for value in matches:
 
-        value = clean(value)
-
-        value = value.replace(
-            "*",
-            ""
-        ).strip()
+        value = clean(
+            value
+        )
 
         if not value:
             continue
@@ -690,10 +722,11 @@ def extract_naukri_name(text):
             r"[A-Za-z][A-Za-z .'\-]{0,70}",
             value
         ):
+
             return value.title()
 
     # --------------------------------------------------------
-    # 2. Name immediately before experience
+    # 2. Explicit pattern:
     #
     # # Nuthan
     # 4y 7m
@@ -701,12 +734,11 @@ def extract_naukri_name(text):
 
     match = re.search(
         r"(?m)^\s*"
-        r"(?:\*{0,2}\s*)?"
+        r"\*{0,2}\s*"
         r"#+\s*"
         r"([A-Za-z][A-Za-z .'\-]{0,70})"
-        r"\s*"
-        r"(?:\*{0,2})"
-        r"\s*\n\s*"
+        r"\s*\*{0,2}\s*$"
+        r"\n\s*"
         r"\d{1,2}\s*y"
         r"(?:\s*\d{1,2}\s*m)?",
         text,
@@ -719,16 +751,79 @@ def extract_naukri_name(text):
             match.group(1)
         )
 
-        if value.lower() not in ignored:
+        if (
+            value
+            and value.lower() not in ignored
+        ):
 
-            if re.fullmatch(
-                r"[A-Za-z][A-Za-z .'\-]{0,70}",
-                value
-            ):
-                return value.title()
+            return value.title()
 
     # --------------------------------------------------------
-    # 3. Explicit name field
+    # 3. Name immediately before experience
+    #
+    # Works even if # formatting was removed.
+    # --------------------------------------------------------
+
+    lines = text.splitlines()
+
+    for i, raw_line in enumerate(lines):
+
+        if i >= 30:
+            break
+
+        line = clean(
+            raw_line
+        )
+
+        if not line:
+            continue
+
+        experience_match = re.fullmatch(
+            r"\d{1,2}\s*y"
+            r"(?:\s*\d{1,2}\s*m)?",
+            line,
+            re.IGNORECASE
+        )
+
+        if not experience_match:
+            continue
+
+        if i == 0:
+            continue
+
+        possible_name = clean(
+            lines[i - 1]
+        )
+
+        possible_name = re.sub(
+            r"^[#*]+\s*",
+            "",
+            possible_name
+        )
+
+        possible_name = clean(
+            possible_name
+        )
+
+        if not possible_name:
+            continue
+
+        if possible_name.lower() in ignored:
+            continue
+
+        if re.fullmatch(
+            r"[A-Za-z][A-Za-z .'\-]{0,70}",
+            possible_name
+        ):
+
+            words = possible_name.split()
+
+            if 1 <= len(words) <= 5:
+
+                return possible_name.title()
+
+    # --------------------------------------------------------
+    # 4. Explicit Name field
     # --------------------------------------------------------
 
     match = re.search(
@@ -747,47 +842,8 @@ def extract_naukri_name(text):
         )
 
         if value:
+
             return value.title()
-
-    # --------------------------------------------------------
-    # 4. Generic fallback around experience
-    # --------------------------------------------------------
-
-    lines = text.splitlines()
-
-    for i, raw_line in enumerate(lines[:20]):
-
-        line = clean(raw_line)
-
-        if not line:
-            continue
-
-        line = re.sub(
-            r"^[#*]+\s*",
-            "",
-            line
-        ).strip()
-
-        if i + 1 < len(lines):
-
-            next_line = clean(
-                lines[i + 1]
-            )
-
-            if re.fullmatch(
-                r"\d{1,2}\s*y"
-                r"(?:\s*\d{1,2}\s*m)?",
-                next_line,
-                re.IGNORECASE
-            ):
-
-                if re.fullmatch(
-                    r"[A-Za-z][A-Za-z .'\-]{0,70}",
-                    line
-                ):
-
-                    if line.lower() not in ignored:
-                        return line.title()
 
     return ""
 
@@ -797,6 +853,9 @@ def extract_naukri_name(text):
 # ============================================================
 
 def extract_naukri_location(text):
+
+    if not text:
+        return ""
 
     # --------------------------------------------------------
     # Typical Naukri header
@@ -826,8 +885,9 @@ def extract_naukri_location(text):
             "previous",
             "current",
             "save",
-            "profile"
+            "profile",
         }:
+
             return location
 
     # --------------------------------------------------------
@@ -851,8 +911,9 @@ def extract_naukri_location(text):
             "na",
             "n/a",
             "-",
-            "none"
+            "none",
         }:
+
             return location
 
     return ""
@@ -864,12 +925,13 @@ def extract_naukri_location(text):
 
 def extract_preferred_locations(text):
 
+    if not text:
+        return ""
+
     # --------------------------------------------------------
-    # Naukri:
+    # Naukri format
     #
     # Pref. locationsBengaluru, Remote, Chennai, Pune, Hyderabad
-    #
-    # followed by:
     # 9611481059 (M)
     # --------------------------------------------------------
 
@@ -877,14 +939,13 @@ def extract_preferred_locations(text):
         r"Pref\.?\s*locations?\s*[:\-]?\s*"
         r"(.+?)"
         r"(?="
-        r"\n\s*(?:\*{0,2})?"
-        r"[6-9]\d{9}\s*\(M\)"
+        r"\n\s*[6-9]\d{9}\s*\(M\)"
         r"|"
-        r"\n\s*(?:\*{0,2})?Call candidate"
+        r"\n\s*Call candidate"
         r"|"
-        r"\n\s*(?:\*{0,2})?WhatsApp"
+        r"\n\s*WhatsApp"
         r"|"
-        r"\n\s*(?:\*{0,2})?View phone number"
+        r"\n\s*View phone number"
         r"|$)",
         text,
         re.IGNORECASE | re.DOTALL
@@ -906,24 +967,27 @@ def extract_preferred_locations(text):
             ""
         )
 
-        # Newlines to comma
         value = re.sub(
             r"\s*\n\s*",
             ", ",
             value
         )
 
-        # Duplicate commas
         value = re.sub(
             r",\s*,+",
             ", ",
             value
         )
 
-        return clean(value)
+        value = clean(
+            value
+        )
+
+        if value:
+            return value
 
     # --------------------------------------------------------
-    # TCS / normal format
+    # TCS format
     # --------------------------------------------------------
 
     value = get_best_match(
@@ -932,7 +996,9 @@ def extract_preferred_locations(text):
         text
     )
 
-    return clean(value)
+    return clean(
+        value
+    )
 
 
 # ============================================================
@@ -940,46 +1006,121 @@ def extract_preferred_locations(text):
 # ============================================================
 
 def extract_naukri_skills(text):
+    """
+    Extract Key skills section without using a fragile
+    large regex.
+
+    This avoids re.PatternError and handles copied
+    Naukri formatting more reliably.
+    """
 
     if not text:
         return ""
 
-    match = re.search(
-        r"(?:##\s*)?Key skills\s*"
-        r"(.*?)"
-        r"(?="
-        r"\n\s*(?:\[.*?View IT skills.*?\])?"
-        r"\s*(?:May also know|"
-        r"##\s*May also know|"
-        r"Work summary|"
-        r"##\s*Work summary|"
-        r"Profile Summary|"
-        r"Employment|"
-        r"Education|"
-        r"Activity|"
-        r"$"
-        r")",
-        text,
-        re.IGNORECASE | re.DOTALL
+    text = normalize_input(
+        text
     )
 
-    if not match:
-        return ""
+    lines = text.splitlines()
 
-    skills_block = match.group(1)
+    skills = []
 
-    skills_block = skills_block.replace(
-        "**",
-        ""
+    inside_skills = False
+
+    stop_headers = {
+        "may also know",
+        "work summary",
+        "profile summary",
+        "employment",
+        "education",
+        "activity",
+        "personal details",
+        "projects",
+        "certifications",
+        "career profile",
+        "work experience",
+        "professional experience",
+    }
+
+    for raw_line in lines:
+
+        line = raw_line.strip()
+
+        if not line:
+            continue
+
+        # Remove bold
+        line = line.replace(
+            "**",
+            ""
+        ).strip()
+
+        # Remove heading markers
+        clean_line = re.sub(
+            r"^#+\s*",
+            "",
+            line
+        ).strip()
+
+        low = clean_line.lower()
+
+        # ----------------------------------------------------
+        # Start Key Skills
+        # ----------------------------------------------------
+
+        if low == "key skills":
+
+            inside_skills = True
+
+            continue
+
+        # ----------------------------------------------------
+        # Stop Key Skills
+        # ----------------------------------------------------
+
+        if inside_skills:
+
+            if low in stop_headers:
+                break
+
+            # View IT skills
+            if "view it skills" in low:
+                continue
+
+            if low in {
+                "view it skill",
+                "view more",
+                "show more",
+                "show all",
+                "view all",
+            }:
+
+                continue
+
+            # Remove markdown links
+            clean_line = re.sub(
+                r"\[([^\]]+)\]\([^)]+\)",
+                r"\1",
+                clean_line
+            )
+
+            # Remove bullets
+            clean_line = re.sub(
+                r"^[•\-\*]+\s*",
+                "",
+                clean_line
+            ).strip()
+
+            if not clean_line:
+                continue
+
+            skills.append(
+                clean_line
+            )
+
+    return "\n".join(
+        skills
     )
-
-    skills_block = re.sub(
-        r"\[([^\]]+)\]\([^)]+\)",
-        r"\1",
-        skills_block
-    )
-
-    return skills_block.strip()
 
 
 # ============================================================
@@ -1005,6 +1146,7 @@ def extract_naukri_experience(text):
     )
 
     if match:
+
         return clean(
             match.group(1)
         )
@@ -1015,13 +1157,16 @@ def extract_naukri_experience(text):
 
     match = re.search(
         r"\b"
-        r"([0-9]{1,2}(?:\.[0-9]{1,2})?\+?\s*y)"
+        r"([0-9]{1,2}"
+        r"(?:\.[0-9]{1,2})?"
+        r"\+?\s*y)"
         r"\b",
         text,
         re.IGNORECASE
     )
 
     if match:
+
         return clean(
             match.group(1)
         )
@@ -1032,14 +1177,17 @@ def extract_naukri_experience(text):
 
     match = re.search(
         r"(?<!\.)\b"
-        r"([0-9]{1,2}(?:\.[0-9]{1,2})?"
-        r"\+?\s*(?:Years?|Yrs?|Yr))"
+        r"([0-9]{1,2}"
+        r"(?:\.[0-9]{1,2})?"
+        r"\+?\s*"
+        r"(?:Years?|Yrs?|Yr))"
         r"\b",
         text,
         re.IGNORECASE
     )
 
     if match:
+
         return clean(
             match.group(1)
         )
@@ -1057,25 +1205,30 @@ def extract_dob(text):
         return ""
 
     # --------------------------------------------------------
-    # 1. Explicit:
+    # Explicit:
+    #
     # Date of Birth: 16 Sep 1994
     # --------------------------------------------------------
 
     patterns = [
 
-        r"(?:Date of Birth|DOB|D\.O\.B)"
-        r"\s*[:\-]?\s*"
-        r"([0-9]{1,2}\s+"
-        r"[A-Za-z]{3,9}\s+"
-        r"[0-9]{4})",
+        (
+            r"(?:Date of Birth|DOB|D\.O\.B)"
+            r"\s*[:\-]?\s*"
+            r"([0-9]{1,2}\s+"
+            r"[A-Za-z]{3,9}\s+"
+            r"[0-9]{4})"
+        ),
 
-        r"(?:Date of Birth|DOB|D\.O\.B)"
-        r"\s*[:\-]?\s*"
-        r"([0-9]{1,2}"
-        r"[\/\-]"
-        r"[0-9]{1,2}"
-        r"[\/\-]"
-        r"[0-9]{2,4})",
+        (
+            r"(?:Date of Birth|DOB|D\.O\.B)"
+            r"\s*[:\-]?\s*"
+            r"([0-9]{1,2}"
+            r"[\/\-]"
+            r"[0-9]{1,2}"
+            r"[\/\-]"
+            r"[0-9]{2,4})"
+        ),
     ]
 
     for pattern in patterns:
@@ -1093,10 +1246,7 @@ def extract_dob(text):
             )
 
     # --------------------------------------------------------
-    # 2. Naukri personal details
-    #
-    # Date of Birth | Gender | Marital status | Category
-    # 16 Sep 1994   | Male   | ...
+    # Naukri Personal Details
     # --------------------------------------------------------
 
     table_match = re.search(
@@ -1118,7 +1268,7 @@ def extract_dob(text):
         )
 
     # --------------------------------------------------------
-    # 3. Line fallback
+    # Line fallback
     # --------------------------------------------------------
 
     lines = text.splitlines()
@@ -1127,7 +1277,9 @@ def extract_dob(text):
 
         if "Date of Birth" in line:
 
-            for next_line in lines[i + 1:i + 5]:
+            for next_line in lines[
+                i + 1:i + 5
+            ]:
 
                 match = re.search(
                     r"\b"
@@ -1180,56 +1332,45 @@ def extract_reason(text):
 def extract_notice_period(text):
     """
     Business rule:
-    Every generated TCS profile should display
-    Immediate Joiner.
+    Always show Immediate Joiner.
     """
 
     return "Immediate Joiner"
 
 
 # ============================================================
-# NAUKRI COMPLETE EXTRACTION
+# COMPLETE NAUKRI EXTRACTION
 # ============================================================
 
 def naukri_extract(text):
 
-    name = extract_naukri_name(text)
-
-    phone = (
-        extract_explicit_phone(text)
-        or extract_naukri_phone(text)
-    )
-
-    email = first_email(text)
-
-    location = extract_naukri_location(text)
-
-    preferred_location = extract_preferred_locations(text)
-
-    skills = extract_naukri_skills(text)
-
-    experience = extract_naukri_experience(text)
-
-    dob = extract_dob(text)
-
-    notice = extract_notice_period(text)
-
-    offer = extract_offer_status(text)
-
-    reason = extract_reason(text)
-
     return {
-        "Full Name": name,
-        "Contact Number": phone,
-        "Email ID": email,
-        "Current Location": location,
-        "Preferred Location": preferred_location,
-        "Skills": skills,
-        "Experience": experience,
-        "Date of Birth": dob,
-        "Notice Period": notice,
-        "Offers": offer,
-        "Reason": reason,
+        "Full Name": extract_naukri_name(text),
+
+        "Contact Number": (
+            extract_explicit_phone(text)
+            or extract_naukri_phone(text)
+        ),
+
+        "Email ID": first_email(text),
+
+        "Current Location": extract_naukri_location(text),
+
+        "Preferred Location": (
+            extract_preferred_locations(text)
+        ),
+
+        "Skills": extract_naukri_skills(text),
+
+        "Experience": extract_naukri_experience(text),
+
+        "Date of Birth": extract_dob(text),
+
+        "Notice Period": extract_notice_period(text),
+
+        "Offers": extract_offer_status(text),
+
+        "Reason": extract_reason(text),
     }
 
 
@@ -1239,11 +1380,17 @@ def naukri_extract(text):
 
 def auto_extract(text):
 
-    text = normalize_input(text)
+    text = normalize_input(
+        text
+    )
 
-    normal_data = smart_extract(text)
+    normal_data = smart_extract(
+        text
+    )
 
-    naukri_data = naukri_extract(text)
+    naukri_data = naukri_extract(
+        text
+    )
 
     final = {}
 
@@ -1261,7 +1408,7 @@ def auto_extract(text):
         "Reason",
     ]
 
-    # Naukri fields should have priority
+    # These fields are more reliable from Naukri
     naukri_priority = {
         "Full Name",
         "Current Location",
@@ -1344,12 +1491,14 @@ def format_experience(exp):
     if not exp:
         return ""
 
-    exp = clean(exp)
+    exp = clean(
+        exp
+    )
 
     # --------------------------------------------------------
     # 4y 7m -> 4.7 years
     #
-    # This follows your required display convention.
+    # This follows the requested display convention.
     # --------------------------------------------------------
 
     match = re.fullmatch(
@@ -1382,7 +1531,9 @@ def format_experience(exp):
 
     if match:
 
-        return f"{match.group(1)} years"
+        return (
+            f"{match.group(1)} years"
+        )
 
     # --------------------------------------------------------
     # 4 years / 4.7 years
@@ -1397,7 +1548,9 @@ def format_experience(exp):
 
     if match:
 
-        return f"{match.group(1)} years"
+        return (
+            f"{match.group(1)} years"
+        )
 
     return exp
 
@@ -1448,7 +1601,9 @@ def clean_skill(skill):
     if not skill:
         return ""
 
-    skill = skill.strip()
+    skill = str(
+        skill
+    ).strip()
 
     skill = skill.replace(
         "**",
@@ -1469,13 +1624,14 @@ def clean_skill(skill):
         skill
     )
 
+    # Excess spaces
     skill = re.sub(
         r"\s+",
         " ",
         skill
-    ).strip()
+    )
 
-    return skill
+    return skill.strip()
 
 
 def extract_top_skills(skills_raw):
@@ -1483,73 +1639,27 @@ def extract_top_skills(skills_raw):
     if not skills_raw:
         return []
 
-    skills_raw = skills_raw.replace(
-        "**",
-        ""
-    )
-
-    lines = skills_raw.splitlines()
-
     skill_list = []
 
-    for line in lines:
+    # Split by lines first
+    parts = re.split(
+        r"[\r\n]+",
+        skills_raw
+    )
 
-        skill = clean_skill(line)
+    for part in parts:
 
-        if not skill:
-            continue
-
-        if skill.lower() in NOISE_SKILLS:
-            continue
-
-        if (
-            "http://" in skill.lower()
-            or "https://" in skill.lower()
-        ):
-            continue
-
-        # Handle pipe separated skills
-        parts = re.split(
-            r"\|",
-            skill
+        # Also handle flattened comma/semicolon/pipe lists
+        sub_parts = re.split(
+            r"[|;,]",
+            part
         )
 
-        for part in parts:
+        for item in sub_parts:
 
-            part = clean_skill(part)
-
-            if not part:
-                continue
-
-            if part.lower() in NOISE_SKILLS:
-                continue
-
-            # Avoid duplicate skills
-            if part.lower() not in [
-                x.lower()
-                for x in skill_list
-            ]:
-
-                skill_list.append(
-                    part
-                )
-
-    # --------------------------------------------------------
-    # If copied content flattened all skills into one line
-    # --------------------------------------------------------
-
-    if len(skill_list) <= 1:
-
-        skill_list = []
-
-        parts = re.split(
-            r",|;|\n|\|",
-            skills_raw
-        )
-
-        for part in parts:
-
-            skill = clean_skill(part)
+            skill = clean_skill(
+                item
+            )
 
             if not skill:
                 continue
@@ -1557,10 +1667,19 @@ def extract_top_skills(skills_raw):
             if skill.lower() in NOISE_SKILLS:
                 continue
 
-            if skill.lower() not in [
+            if (
+                "http://" in skill.lower()
+                or "https://" in skill.lower()
+            ):
+                continue
+
+            # Avoid duplicate skills
+            existing = {
                 x.lower()
                 for x in skill_list
-            ]:
+            }
+
+            if skill.lower() not in existing:
 
                 skill_list.append(
                     skill
@@ -1579,7 +1698,9 @@ def get_interview_dates():
         "Asia/Kolkata"
     )
 
-    now = datetime.now(ist)
+    now = datetime.now(
+        ist
+    )
 
     india_holidays = holidays.India(
         years=[
@@ -1602,7 +1723,7 @@ def get_interview_dates():
         microsecond=0
     )
 
-    # After / at 2 PM -> start next day
+    # At / after 2 PM -> next working day
     if now >= cutoff:
 
         current += timedelta(
@@ -1615,7 +1736,8 @@ def get_interview_dates():
 
         if (
             current.weekday() < 5
-            and current.date() not in india_holidays
+            and current.date()
+            not in india_holidays
         ):
 
             dates.append(
@@ -1662,7 +1784,7 @@ def generate_tracker_row(
         ).lower()
 
         # ----------------------------------------------------
-        # Candidate name
+        # Name
         # ----------------------------------------------------
 
         if col in {
@@ -1701,7 +1823,7 @@ def generate_tracker_row(
             return email
 
         # ----------------------------------------------------
-        # Skill
+        # Skills
         # ----------------------------------------------------
 
         if (
@@ -1777,11 +1899,13 @@ def generate_tracker_row(
         for column in tracker_cols
     ]
 
-    return "\t".join(row)
+    return "\t".join(
+        row
+    )
 
 
 # ============================================================
-# GENERATE BUTTON
+# GENERATE PROFILE
 # ============================================================
 
 if st.button(
@@ -1803,12 +1927,16 @@ if st.button(
         st.stop()
 
     # ========================================================
-    # NORMALIZE + EXTRACT
+    # NORMALIZE INPUT
     # ========================================================
 
     source_text = normalize_input(
         email_text
     )
+
+    # ========================================================
+    # EXTRACT ALL DATA
+    # ========================================================
 
     data = auto_extract(
         source_text
@@ -1829,7 +1957,7 @@ if st.button(
     # PHONE
     # ========================================================
 
-    # Manual override has highest priority
+    # Manual override gets highest priority
     phone = valid_phone(
         manual_phone
     )
@@ -1843,6 +1971,7 @@ if st.button(
             )
         )
 
+    # Final fallback
     if not phone:
 
         phone = first_phone(
@@ -1861,7 +1990,7 @@ if st.button(
     )
 
     # ========================================================
-    # LOCATION
+    # CURRENT LOCATION
     # ========================================================
 
     location = clean(
@@ -1870,6 +1999,10 @@ if st.button(
             ""
         )
     )
+
+    # ========================================================
+    # PREFERRED LOCATION
+    # ========================================================
 
     pref_location = clean(
         data.get(
@@ -1921,34 +2054,21 @@ if st.button(
         skills_raw
     )
 
-    # Keep first 3 only after validation
-    if len(actual_skill_list) >= 3:
+    # First 3 actual skills
+    skill_list = actual_skill_list[:3]
 
-        skill_list = actual_skill_list[:3]
+    # Pad ONLY for display/template
+    while len(skill_list) < 3:
 
-    else:
-
-        skill_list = actual_skill_list[:]
-
-        while len(skill_list) < 3:
-
-            skill_list.append("")
+        skill_list.append("")
 
     # ========================================================
     # NOTICE / OFFER / REASON
     # ========================================================
 
-    notice_period = clean(
-        data.get(
-            "Notice Period",
-            ""
-        )
-    )
-
-    # Business rule
-    if not notice_period:
-
-        notice_period = "Immediate Joiner"
+    # Business rule:
+    # Always Immediate Joiner
+    notice_period = "Immediate Joiner"
 
     offer = clean(
         data.get(
@@ -1964,12 +2084,7 @@ if st.button(
         )
     )
 
-    # --------------------------------------------------------
-    # Current defaults
-    #
-    # Keep these if they are your TCS business rules.
-    # --------------------------------------------------------
-
+    # Keep these as your existing business defaults
     if not offer:
 
         offer = "No"
@@ -1981,7 +2096,7 @@ if st.button(
     # ========================================================
     # VALIDATION
     # IMPORTANT:
-    # This happens BEFORE DOCX generation.
+    # VALIDATE BEFORE CREATING DOCX
     # ========================================================
 
     missing_fields = []
@@ -2025,7 +2140,7 @@ if st.button(
     if not mmdd:
 
         missing_fields.append(
-            "Valid DOB for filename"
+            "Valid DOB"
         )
 
     if len(actual_skill_list) < 3:
@@ -2034,24 +2149,96 @@ if st.button(
             "At least 3 Skills"
         )
 
-    # --------------------------------------------------------
-    # Stop if anything mandatory is missing
-    # --------------------------------------------------------
+    # ========================================================
+    # SHOW EXTRACTION RESULT
+    # ========================================================
+
+    st.subheader(
+        "🔎 Extracted Candidate Details"
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        st.write(
+            f"**Name:** "
+            f"{name or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Contact:** "
+            f"{phone or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Email:** "
+            f"{email or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Current Location:** "
+            f"{location or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Preferred Location:** "
+            f"{pref_location or 'Not Found'}"
+        )
+
+    with col2:
+
+        st.write(
+            f"**Experience:** "
+            f"{exp or 'Not Found'}"
+        )
+
+        st.write(
+            f"**DOB:** "
+            f"{dob or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Skill 1:** "
+            f"{skill_list[0] or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Skill 2:** "
+            f"{skill_list[1] or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Skill 3:** "
+            f"{skill_list[2] or 'Not Found'}"
+        )
+
+        st.write(
+            f"**Notice Period:** "
+            f"{notice_period}"
+        )
+
+    # ========================================================
+    # STOP IF MANDATORY DATA IS MISSING
+    # ========================================================
 
     if missing_fields:
 
         st.error(
             "❌ Profile cannot be generated.\n\n"
             "Missing / unverified fields: "
-            + ", ".join(missing_fields)
+            + ", ".join(
+                missing_fields
+            )
         )
 
         if not phone:
 
             st.info(
-                "If Naukri shows 'View phone number', "
-                "enter the actual candidate number in "
-                "the Contact Number Override box."
+                "If Naukri displays "
+                "'View phone number', enter the actual "
+                "candidate number in the Contact Number "
+                "Override box."
             )
 
         st.stop()
@@ -2065,90 +2252,45 @@ if st.button(
     time_slot = "10:00AM-06:00PM"
 
     # ========================================================
-    # DISPLAY EXTRACTED DATA
+    # TEMPLATE PATH
     # ========================================================
 
-    st.subheader(
-        "🔎 Extracted Candidate Details"
+    template_path = Path(
+        "tcs_template.docx"
     )
 
-    col1, col2 = st.columns(2)
+    if not template_path.exists():
 
-    with col1:
-
-        st.write(
-            f"**Name:** {name}"
+        st.error(
+            "❌ tcs_template.docx was not found."
         )
 
-        st.write(
-            f"**Contact:** {phone}"
+        st.info(
+            "Place tcs_template.docx in the same "
+            "folder as app.py."
         )
 
-        st.write(
-            f"**Email:** {email}"
-        )
-
-        st.write(
-            f"**Current Location:** {location}"
-        )
-
-        st.write(
-            f"**Preferred Location:** "
-            f"{pref_location or 'Not Found'}"
-        )
-
-    with col2:
-
-        st.write(
-            f"**Experience:** {exp}"
-        )
-
-        st.write(
-            f"**DOB:** {dob}"
-        )
-
-        st.write(
-            f"**Skill 1:** {skill_list[0]}"
-        )
-
-        st.write(
-            f"**Skill 2:** {skill_list[1]}"
-        )
-
-        st.write(
-            f"**Skill 3:** {skill_list[2]}"
-        )
-
-        st.write(
-            f"**Notice Period:** {notice_period}"
-        )
-
-        st.write(
-            f"**Offers:** {offer}"
-        )
-
-        st.write(
-            f"**Reason:** {reason}"
-        )
+        st.stop()
 
     # ========================================================
-    # TEMPLATE FILE
+    # LOAD TEMPLATE
     # ========================================================
 
     try:
 
         doc = DocxTemplate(
-            "tcs_template.docx"
+            str(template_path)
         )
 
     except Exception as e:
 
         st.error(
-            "❌ Could not open "
-            "tcs_template.docx"
+            "❌ Could not open tcs_template.docx"
         )
 
-        st.exception(e)
+        st.exception(
+            e
+        )
 
         st.stop()
 
@@ -2174,41 +2316,37 @@ if st.button(
 
         "SKILL3": skill_list[2],
 
-        # Experience
         "EXP1": exp,
+
         "EXP2": exp,
+
         "EXP3": exp,
 
-        # Notice
         "NOTICE_PERIOD": notice_period,
 
-        # Offer
         "OFFER": offer,
 
-        # Relocation
         "RELOCATION": (
             pref_location
             if pref_location
             else location
         ),
 
-        # Reason
         "REASON": reason,
 
-        # DOB
         "DOB": dob,
 
-        # Interview dates
         "NEXT_DATE1": dates[0],
+
         "NEXT_DATE2": dates[1],
+
         "NEXT_DATE3": dates[2],
 
-        # Time
         "TIME": time_slot,
     }
 
     # ========================================================
-    # RENDER DOCUMENT
+    # RENDER DOCX
     # ========================================================
 
     try:
@@ -2224,7 +2362,9 @@ if st.button(
             "the Word template."
         )
 
-        st.exception(e)
+        st.exception(
+            e
+        )
 
         st.stop()
 
@@ -2248,11 +2388,6 @@ if st.button(
         f"{mmdd}.docx"
     )
 
-    # Example:
-    # Nuthan + 0916
-    #
-    # PTN_IN_RGSID_Nuthan0916.docx
-
     # ========================================================
     # SAVE
     # ========================================================
@@ -2270,7 +2405,9 @@ if st.button(
             "Word file."
         )
 
-        st.exception(e)
+        st.exception(
+            e
+        )
 
         st.stop()
 
@@ -2278,20 +2415,34 @@ if st.button(
     # DOWNLOAD
     # ========================================================
 
-    with open(
-        file_name,
-        "rb"
-    ) as file:
+    try:
 
-        st.download_button(
-            label="📥 Download TCS Profile",
-            data=file,
-            file_name=file_name,
-            mime=(
-                "application/vnd.openxmlformats-officedocument."
-                "wordprocessingml.document"
+        with open(
+            file_name,
+            "rb"
+        ) as file:
+
+            st.download_button(
+                label="📥 Download TCS Profile",
+                data=file.read(),
+                file_name=file_name,
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                )
             )
+
+    except Exception as e:
+
+        st.error(
+            "❌ Could not prepare file "
+            "for download."
         )
+
+        st.exception(
+            e
+        )
+        st.stop()
 
     # ========================================================
     # SUCCESS
@@ -2331,7 +2482,7 @@ if st.button(
         )
 
     # ========================================================
-    # FINAL PROFILE SUMMARY
+    # FINAL SUMMARY
     # ========================================================
 
     st.subheader(
@@ -2355,6 +2506,11 @@ if st.button(
     )
 
     st.write(
+        f"**Current Location:** "
+        f"{location}"
+    )
+
+    st.write(
         f"**Experience:** {exp}"
     )
 
@@ -2375,5 +2531,6 @@ if st.button(
     )
 
     st.write(
-        f"**Time Slot:** {time_slot}"
+        f"**Time Slot:** "
+        f"{time_slot}"
     )
