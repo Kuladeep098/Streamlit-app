@@ -663,190 +663,285 @@ def smart_extract(text):
 # ============================================================
 
 def extract_naukri_name(text):
+    """
+    Robust Naukri / Resdex candidate name extraction.
+
+    Handles:
+        # Nuthan
+        ## Nuthan
+        Nuthan
+        # Nuthan
+        4y 7m
+
+    Also handles explicit:
+        Candidate Name: Nuthan
+        Full Name: Nuthan
+        Name: Nuthan
+    """
 
     if not text:
         return ""
 
-    text = normalize_input(
-        text
-    )
+    text = normalize_input(text)
+
+    # ========================================================
+    # IGNORE LIST
+    # ========================================================
 
     ignored = {
-        "jobs responses",
+        "naukri",
         "resdex",
+        "profile",
+        "candidate",
+        "jobs responses",
         "ai rex",
         "premiumx",
         "reports",
         "search",
-        "profile",
         "save",
-        "candidate",
-        "naukri",
+        "forward",
+        "schedule",
+        "contact",
+        "email",
+        "phone",
+        "mobile",
+        "location",
+        "experience",
+        "skills",
+        "key skills",
+        "work experience",
+        "work summary",
+        "may also know",
+        "personal details",
+        "education",
+        "employment",
     }
 
-    # --------------------------------------------------------
-    # 1. Markdown heading
-    #
-    # # Nuthan
-    # ## Nuthan
-    # **# Nuthan**
-    # --------------------------------------------------------
+    # ========================================================
+    # HELPER TO VALIDATE NAME
+    # ========================================================
 
-    heading_pattern = (
-        r"(?m)^\s*"
-        r"\*{0,2}\s*"
-        r"#+\s*"
-        r"([A-Za-z][A-Za-z .'\-]{0,70})"
-        r"\s*"
-        r"\*{0,2}\s*$"
-    )
+    def is_valid_name(value):
 
-    matches = re.findall(
-        heading_pattern,
-        text
-    )
+        if not value:
+            return False
 
-    for value in matches:
+        value = clean(value)
 
-        value = clean(
+        # Remove heading / markdown symbols
+        value = re.sub(
+            r"^[#*]+\s*",
+            "",
             value
         )
 
+        value = value.strip()
+
         if not value:
-            continue
+            return False
 
         if value.lower() in ignored:
-            continue
+            return False
 
-        if re.fullmatch(
+        # Never accept email
+        if "@" in value:
+            return False
+
+        # Never accept URL
+        if re.search(
+            r"https?://",
+            value,
+            re.IGNORECASE
+        ):
+            return False
+
+        # Never accept numbers
+        if re.search(
+            r"\d",
+            value
+        ):
+            return False
+
+        # Name characters only
+        if not re.fullmatch(
             r"[A-Za-z][A-Za-z .'\-]{0,70}",
             value
         ):
+            return False
 
-            return value.title()
+        words = value.split()
 
-    # --------------------------------------------------------
-    # 2. Explicit pattern:
+        # Maximum 5 words
+        if not 1 <= len(words) <= 5:
+            return False
+
+        return True
+
+    # ========================================================
+    # 1. EXPLICIT NAME FIELD
+    # ========================================================
+
+    explicit_patterns = [
+
+        r"(?:Candidate\s*Name)"
+        r"\s*[:\-]\s*"
+        r"([A-Za-z][A-Za-z .'\-]{0,70})",
+
+        r"(?:Full\s*Name)"
+        r"\s*[:\-]\s*"
+        r"([A-Za-z][A-Za-z .'\-]{0,70})",
+
+        r"(?<![A-Za-z])Name"
+        r"\s*[:\-]\s*"
+        r"([A-Za-z][A-Za-z .'\-]{0,70})",
+    ]
+
+    for pattern in explicit_patterns:
+
+        match = re.search(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
+
+        if match:
+
+            candidate = clean(
+                match.group(1)
+            )
+
+            if is_valid_name(candidate):
+
+                return candidate.title()
+
+    # ========================================================
+    # 2. FIND NAME BEFORE EXPERIENCE
+    #
+    # Most reliable for Naukri:
     #
     # # Nuthan
     # 4y 7m
-    # --------------------------------------------------------
-
-    match = re.search(
-        r"(?m)^\s*"
-        r"\*{0,2}\s*"
-        r"#+\s*"
-        r"([A-Za-z][A-Za-z .'\-]{0,70})"
-        r"\s*\*{0,2}\s*$"
-        r"\n\s*"
-        r"\d{1,2}\s*y"
-        r"(?:\s*\d{1,2}\s*m)?",
-        text,
-        re.IGNORECASE
-    )
-
-    if match:
-
-        value = clean(
-            match.group(1)
-        )
-
-        if (
-            value
-            and value.lower() not in ignored
-        ):
-
-            return value.title()
-
-    # --------------------------------------------------------
-    # 3. Name immediately before experience
-    #
-    # Works even if # formatting was removed.
-    # --------------------------------------------------------
+    # ========================================================
 
     lines = text.splitlines()
 
     for i, raw_line in enumerate(lines):
 
-        if i >= 30:
-            break
-
-        line = clean(
-            raw_line
-        )
+        line = raw_line.strip()
 
         if not line:
             continue
 
-        experience_match = re.fullmatch(
-            r"\d{1,2}\s*y"
-            r"(?:\s*\d{1,2}\s*m)?",
-            line,
-            re.IGNORECASE
-        )
-
-        if not experience_match:
-            continue
-
-        if i == 0:
-            continue
-
-        possible_name = clean(
-            lines[i - 1]
-        )
-
-        possible_name = re.sub(
+        # Remove markdown
+        line_without_markdown = re.sub(
             r"^[#*]+\s*",
             "",
-            possible_name
+            line
         )
 
-        possible_name = clean(
-            possible_name
+        line_without_markdown = clean(
+            line_without_markdown
         )
 
-        if not possible_name:
-            continue
-
-        if possible_name.lower() in ignored:
-            continue
+        # Is this an experience line?
+        experience_pattern = (
+            r"^\d{1,2}\s*y"
+            r"(?:\s*\d{1,2}\s*m)?$"
+        )
 
         if re.fullmatch(
-            r"[A-Za-z][A-Za-z .'\-]{0,70}",
-            possible_name
+            experience_pattern,
+            line_without_markdown,
+            re.IGNORECASE
         ):
 
-            words = possible_name.split()
+            # Search backwards for nearest usable line
+            for j in range(
+                i - 1,
+                max(-1, i - 5),
+                -1
+            ):
 
-            if 1 <= len(words) <= 5:
+                previous = lines[j].strip()
 
-                return possible_name.title()
+                if not previous:
+                    continue
 
-    # --------------------------------------------------------
-    # 4. Explicit Name field
-    # --------------------------------------------------------
+                previous = re.sub(
+                    r"^[#*]+\s*",
+                    "",
+                    previous
+                )
 
-    match = re.search(
-        r"(?:Candidate\s*Name|"
-        r"Full\s*Name|Name)"
-        r"\s*[:\-]\s*"
-        r"([A-Za-z][A-Za-z .'\-]{1,80})",
-        text,
-        re.IGNORECASE
-    )
+                previous = clean(
+                    previous
+                )
 
-    if match:
+                if is_valid_name(previous):
 
-        value = clean(
-            match.group(1)
+                    return previous.title()
+
+    # ========================================================
+    # 3. DIRECT NUKAURI HEADING
+    #
+    # # Nuthan
+    # ========================================================
+
+    for raw_line in lines[:30]:
+
+        line = raw_line.strip()
+
+        if not line:
+            continue
+
+        # Only inspect lines beginning with #
+        if not line.startswith("#"):
+            continue
+
+        candidate = re.sub(
+            r"^#+\s*",
+            "",
+            line
         )
 
-        if value:
+        candidate = candidate.replace(
+            "**",
+            ""
+        )
 
-            return value.title()
+        candidate = clean(
+            candidate
+        )
+
+        if is_valid_name(candidate):
+
+            return candidate.title()
+
+    # ========================================================
+    # 4. FIRST NAME-LIKE LINE
+    #
+    # Conservative fallback
+    # ========================================================
+
+    for raw_line in lines[:15]:
+
+        candidate = raw_line.strip()
+
+        candidate = re.sub(
+            r"^[#*]+\s*",
+            "",
+            candidate
+        )
+
+        candidate = clean(
+            candidate
+        )
+
+        if is_valid_name(candidate):
+
+            return candidate.title()
 
     return ""
-
 
 # ============================================================
 # NAUKRI LOCATION
@@ -1452,6 +1547,13 @@ def auto_extract(text):
             final[key] = (
                 valid_email(normal_value)
                 or valid_email(naukri_value)
+                or ""
+            )
+
+        elif key == "Full Name":
+            final[key] = (
+                naukri_value
+                or normal_value
                 or ""
             )
 
