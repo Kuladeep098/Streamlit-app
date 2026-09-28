@@ -18,19 +18,119 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📄 TCS Profile Generator")
+
+# ============================================================
+# PROFESSIONAL UI STYLING
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+    .main-title {
+        font-size: 30px;
+        font-weight: 700;
+        margin-bottom: 2px;
+    }
+
+    .sub-title {
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 22px;
+    }
+
+    .section-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 18px 20px 20px 20px;
+        margin: 12px 0 20px 0;
+        background: #ffffff;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .section-title {
+        font-size: 18px;
+        font-weight: 650;
+        margin-bottom: 4px;
+    }
+
+    .section-help {
+        color: #6b7280;
+        font-size: 13px;
+        margin-bottom: 15px;
+    }
+
+    .skill-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #fafafa;
+    }
+
+    .result-card {
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        padding: 18px 20px;
+        margin-top: 14px;
+        background: #f8fbff;
+    }
+
+    div.stButton > button {
+        border-radius: 8px;
+        font-weight: 600;
+        min-height: 42px;
+    }
+
+    div[data-testid="stTextInput"] input {
+        border-radius: 8px;
+    }
+
+    div[data-testid="stTextArea"] textarea {
+        border-radius: 8px;
+    }
+
+    [data-testid="stMetric"] {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="main-title">📄 TCS Profile Generator</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="sub-title">Extract candidate information, review and edit the details, then generate the TCS profile.</div>',
+    unsafe_allow_html=True
+)
 
 
 # ============================================================
 # UI
 # ============================================================
 
-email_text = st.text_area(
-    "Paste Candidate Email / Naukri / Resdex / Resume Data",
-    height=350
+st.markdown(
+    '<div class="section-card">'
+    '<div class="section-title">📥 Candidate Source Data</div>'
+    '<div class="section-help">Paste the candidate Email, Naukri, Resdex or Resume details below.</div>'
+    '</div>',
+    unsafe_allow_html=True
 )
 
+email_text = st.text_area(
+    "Candidate Data",
+    height=300,
+    placeholder=(
+        "Paste candidate information here..."
+    ),
+    label_visibility="collapsed"
+)
 
+st.markdown("")
 # ============================================================
 # BASIC CLEANING
 # ============================================================
@@ -2120,8 +2220,12 @@ if st.session_state.review_data is not None:
         current_source != st.session_state.review_source
     )
 
-    st.subheader(
-        "🔎 Reviewing Candidate Details — Editable"
+    st.markdown(
+        '<div class="section-card">'
+        '<div class="section-title">🔎 Review Candidate Details</div>'
+        '<div class="section-help">Review the extracted information and edit any incorrect value before generating the profile.</div>'
+        '</div>',
+        unsafe_allow_html=True
     )
 
     if source_changed:
@@ -2132,7 +2236,9 @@ if st.session_state.review_data is not None:
 
     review = st.session_state.review_data
 
-    col1, col2 = st.columns(2)
+    st.markdown("### 👤 Candidate Information")
+
+    col1, col2 = st.columns(2, gap="large")
 
     with col1:
 
@@ -2182,18 +2288,25 @@ if st.session_state.review_data is not None:
             help="Example: 16 Sep 1994"
         )
 
+    st.markdown("### 🛠 Primary Skills")
+
+    skill_col1, skill_col2, skill_col3 = st.columns(3, gap="medium")
+
+    with skill_col1:
         skill1 = st.text_input(
             "Skill 1",
             value=review.get("Skill 1", ""),
             key=f"edit_skill1_{st.session_state.review_version}"
         )
 
+    with skill_col2:
         skill2 = st.text_input(
             "Skill 2",
             value=review.get("Skill 2", ""),
             key=f"edit_skill2_{st.session_state.review_version}"
         )
 
+    with skill_col3:
         skill3 = st.text_input(
             "Skill 3",
             value=review.get("Skill 3", ""),
@@ -2201,6 +2314,8 @@ if st.session_state.review_data is not None:
         )
 
         # Fixed business rule
+        st.markdown("### 📋 Profile Details")
+
         notice_period = st.text_input(
             "Notice Period",
             value="Immediate Joiner",
@@ -2225,9 +2340,10 @@ if st.session_state.review_data is not None:
     # --------------------------------------------------------
 
     st.markdown("---")
-    st.caption(
-        "✏️ You can edit any extracted value above. "
-        "The edited values will be used for the DOCX, filename and tracker."
+
+    st.info(
+        "✏️ Review all fields carefully. Your edited values will be used "
+        "for the generated DOCX and filename."
     )
 
     # --------------------------------------------------------
@@ -2237,6 +2353,7 @@ if st.session_state.review_data is not None:
     generate_clicked = st.button(
         "📄 Confirm & Generate TCS Profile",
         type="primary",
+        use_container_width=True,
         disabled=source_changed
     )
 
@@ -2580,8 +2697,12 @@ if st.session_state.review_data is not None:
         # FINAL SUMMARY
         # ====================================================
 
-        st.subheader(
-            "📄 Generated Profile Summary"
+        st.markdown(
+            '<div class="section-card">'
+            '<div class="section-title">📄 Generated Profile Summary</div>'
+            '<div class="section-help">Final details used to generate the candidate profile.</div>'
+            '</div>',
+            unsafe_allow_html=True
         )
 
         st.write(
