@@ -1811,9 +1811,8 @@ def get_interview_dates():
         ]
     )
 
-    # ALWAYS start from tomorrow.
-    # The day on which the profile is prepared
-    # should never be used as an interview date.
+    # Always start from TOMORROW.
+    # Today is never used as an interview date.
     current = (
         now.replace(
             hour=0,
@@ -1828,8 +1827,6 @@ def get_interview_dates():
 
     while len(dates) < 3:
 
-        # Monday = 0
-        # Sunday = 6
         is_weekday = current.weekday() < 5
 
         is_holiday = (
@@ -1850,6 +1847,7 @@ def get_interview_dates():
         )
 
     return dates, now
+
 
 # ============================================================
 # TRACKER
@@ -2013,6 +2011,12 @@ if "review_data" not in st.session_state:
 if "review_source" not in st.session_state:
     st.session_state.review_source = ""
 
+# Incremented every time new candidate data is reviewed.
+# This gives the editable widgets fresh keys, so old candidate
+# values cannot remain when a new candidate is pasted.
+if "review_version" not in st.session_state:
+    st.session_state.review_version = 0
+
 current_source = normalize_input(email_text)
 
 # ------------------------------------------------------------
@@ -2082,6 +2086,11 @@ if st.button(
 
     # Save extracted values into session state.
     # These values can now be edited by the recruiter.
+    # IMPORTANT:
+    # Create a new widget version for every new candidate.
+    # Streamlit otherwise keeps old text_input values in widget state.
+    st.session_state.review_version += 1
+
     st.session_state.review_data = {
         "Full Name": clean(
             extracted.get("Full Name", "")
@@ -2146,37 +2155,37 @@ if st.session_state.review_data is not None:
         name = st.text_input(
             "Candidate Name",
             value=review.get("Full Name", ""),
-            key="edit_candidate_name"
+            key=f"edit_candidate_name_{st.session_state.review_version}"
         )
 
         phone = st.text_input(
             "Contact Number",
             value=review.get("Contact Number", ""),
-            key="edit_contact_number"
+            key=f"edit_contact_number_{st.session_state.review_version}"
         )
 
         email = st.text_input(
             "Email ID",
             value=review.get("Email ID", ""),
-            key="edit_email"
+            key=f"edit_email_{st.session_state.review_version}"
         )
 
         location = st.text_input(
             "Current Location",
             value=review.get("Current Location", ""),
-            key="edit_current_location"
+            key=f"edit_current_location_{st.session_state.review_version}"
         )
 
         pref_location = st.text_input(
             "Preferred Location",
             value=review.get("Preferred Location", ""),
-            key="edit_preferred_location"
+            key=f"edit_preferred_location_{st.session_state.review_version}"
         )
 
         exp = st.text_input(
             "Experience",
             value=review.get("Experience", ""),
-            key="edit_experience",
+            key=f"edit_experience_{st.session_state.review_version}",
             help="Example: 4.7 years"
         )
 
@@ -2185,26 +2194,26 @@ if st.session_state.review_data is not None:
         dob = st.text_input(
             "Date of Birth",
             value=review.get("Date of Birth", ""),
-            key="edit_dob",
+            key=f"edit_dob_{st.session_state.review_version}",
             help="Example: 16 Sep 1994"
         )
 
         skill1 = st.text_input(
             "Skill 1",
             value=review.get("Skill 1", ""),
-            key="edit_skill1"
+            key=f"edit_skill1_{st.session_state.review_version}"
         )
 
         skill2 = st.text_input(
             "Skill 2",
             value=review.get("Skill 2", ""),
-            key="edit_skill2"
+            key=f"edit_skill2_{st.session_state.review_version}"
         )
 
         skill3 = st.text_input(
             "Skill 3",
             value=review.get("Skill 3", ""),
-            key="edit_skill3"
+            key=f"edit_skill3_{st.session_state.review_version}"
         )
 
         # Fixed business rule
@@ -2212,19 +2221,19 @@ if st.session_state.review_data is not None:
             "Notice Period",
             value="Immediate Joiner",
             disabled=True,
-            key="edit_notice_period"
+            key=f"edit_notice_period_{st.session_state.review_version}"
         )
 
         offer = st.text_input(
             "Offers in Pipeline / In Hand",
             value=review.get("Offers", "No"),
-            key="edit_offer"
+            key=f"edit_offer_{st.session_state.review_version}"
         )
 
         reason = st.text_input(
             "Exact Reason for Change",
             value=review.get("Reason", "Career Growth"),
-            key="edit_reason"
+            key=f"edit_reason_{st.session_state.review_version}"
         )
 
     # --------------------------------------------------------
