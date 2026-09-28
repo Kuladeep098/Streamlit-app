@@ -2007,526 +2007,568 @@ def generate_tracker_row(
 
 
 # ============================================================
-# GENERATE PROFILE
+# REVIEW / GENERATE PROFILE
 # ============================================================
 
+# Initialize session state
+if "review_data" not in st.session_state:
+    st.session_state.review_data = None
+
+if "review_source" not in st.session_state:
+    st.session_state.review_source = ""
+
+current_source = normalize_input(email_text)
+
+# ------------------------------------------------------------
+# REVIEW / EXTRACT BUTTON
+# ------------------------------------------------------------
+
 if st.button(
-    "Generate TCS Profile",
+    "🔎 Review / Extract Candidate Details",
     type="primary"
 ):
 
-    # ========================================================
-    # INPUT VALIDATION
-    # ========================================================
-
     if not email_text.strip():
-
         st.warning(
-            "Please paste candidate Email / "
-            "Naukri / Resdex data."
+            "Please paste candidate Email / Naukri / Resdex data."
         )
-
         st.stop()
 
-    # ========================================================
-    # NORMALIZE INPUT
-    # ========================================================
+    source_text = normalize_input(email_text)
 
-    source_text = normalize_input(
-        email_text
-    )
+    # Extract automatically
+    extracted = auto_extract(source_text)
 
-    # ========================================================
-    # EXTRACT ALL DATA
-    # ========================================================
+    # Contact number:
+    # Manual override has highest priority
+    extracted_phone = valid_phone(manual_phone)
 
-    data = auto_extract(
-        source_text
-    )
-
-    # ========================================================
-    # NAME
-    # ========================================================
-
-    name = clean(
-        data.get(
-            "Full Name",
-            ""
-        )
-    )
-
-    # ========================================================
-    # PHONE
-    # ========================================================
-
-    # Manual override gets highest priority
-    phone = valid_phone(
-        manual_phone
-    )
-
-    if not phone:
-
-        phone = valid_phone(
-            data.get(
-                "Contact Number",
-                ""
-            )
+    if not extracted_phone:
+        extracted_phone = valid_phone(
+            extracted.get("Contact Number", "")
         )
 
-    # Final fallback
-    if not phone:
+    if not extracted_phone:
+        extracted_phone = first_phone(source_text)
 
-        phone = first_phone(
-            source_text
-        )
-
-    # ========================================================
-    # EMAIL
-    # ========================================================
-
-    email = valid_email(
-        data.get(
-            "Email ID",
-            ""
-        )
-    )
-
-    # ========================================================
-    # CURRENT LOCATION
-    # ========================================================
-
-    location = clean(
-        data.get(
-            "Current Location",
-            ""
-        )
-    )
-
-    # ========================================================
-    # PREFERRED LOCATION
-    # ========================================================
-
-    pref_location = clean(
-        data.get(
-            "Preferred Location",
-            ""
-        )
-    )
-
-    # ========================================================
-    # EXPERIENCE
-    # ========================================================
-
+    # Format experience
     exp_raw = clean(
-        data.get(
-            "Experience",
-            ""
-        )
+        extracted.get("Experience", "")
     )
+    exp = format_experience(exp_raw)
 
-    exp = format_experience(
-        exp_raw
-    )
+    # Skills
+    skills_raw = extracted.get("Skills", "")
+    actual_skill_list = extract_top_skills(skills_raw)
 
-    # ========================================================
-    # DOB
-    # ========================================================
+    # Keep first 3 skills for review
+    review_skills = actual_skill_list[:3]
 
-    dob = clean(
-        data.get(
-            "Date of Birth",
-            ""
-        )
-    )
+    while len(review_skills) < 3:
+        review_skills.append("")
 
-    mmdd = get_mmdd(
-        dob
-    )
-
-    # ========================================================
-    # SKILLS
-    # ========================================================
-
-    skills_raw = data.get(
-        "Skills",
-        ""
-    )
-
-    actual_skill_list = extract_top_skills(
-        skills_raw
-    )
-
-    # First 3 actual skills
-    skill_list = actual_skill_list[:3]
-
-    # Pad ONLY for display/template
-    while len(skill_list) < 3:
-
-        skill_list.append("")
-
-    # ========================================================
-    # NOTICE / OFFER / REASON
-    # ========================================================
-
-    # Business rule:
-    # Always Immediate Joiner
+    # Business rule
     notice_period = "Immediate Joiner"
 
     offer = clean(
-        data.get(
-            "Offers",
-            ""
-        )
+        extracted.get("Offers", "")
     )
-
     reason = clean(
-        data.get(
-            "Reason",
-            ""
-        )
+        extracted.get("Reason", "")
     )
 
-    # Keep these as your existing business defaults
+    # Existing defaults
     if not offer:
-
         offer = "No"
 
     if not reason:
-
         reason = "Career Growth"
 
-    # ========================================================
-    # VALIDATION
-    # IMPORTANT:
-    # VALIDATE BEFORE CREATING DOCX
-    # ========================================================
+    # Save extracted values into session state.
+    # These values can now be edited by the recruiter.
+    st.session_state.review_data = {
+        "Full Name": clean(
+            extracted.get("Full Name", "")
+        ),
+        "Contact Number": extracted_phone,
+        "Email ID": valid_email(
+            extracted.get("Email ID", "")
+        ),
+        "Current Location": clean(
+            extracted.get("Current Location", "")
+        ),
+        "Preferred Location": clean(
+            extracted.get("Preferred Location", "")
+        ),
+        "Experience": exp,
+        "Date of Birth": clean(
+            extracted.get("Date of Birth", "")
+        ),
+        "Skill 1": review_skills[0],
+        "Skill 2": review_skills[1],
+        "Skill 3": review_skills[2],
+        "Notice Period": notice_period,
+        "Offers": offer,
+        "Reason": reason,
+    }
 
-    missing_fields = []
+    st.session_state.review_source = source_text
 
-    if not name:
+    st.success(
+        "Details extracted. Please review and edit them below before generating the profile."
+    )
 
-        missing_fields.append(
-            "Candidate Name"
-        )
 
-    if not phone:
+# ------------------------------------------------------------
+# EDITABLE REVIEW SECTION
+# ------------------------------------------------------------
 
-        missing_fields.append(
-            "Contact Number"
-        )
+if st.session_state.review_data is not None:
 
-    if not email:
-
-        missing_fields.append(
-            "Email ID"
-        )
-
-    if not location:
-
-        missing_fields.append(
-            "Current Location"
-        )
-
-    if not exp:
-
-        missing_fields.append(
-            "Experience"
-        )
-
-    if not dob:
-
-        missing_fields.append(
-            "Date of Birth"
-        )
-
-    if not mmdd:
-
-        missing_fields.append(
-            "Valid DOB"
-        )
-
-    if len(actual_skill_list) < 3:
-
-        missing_fields.append(
-            "At least 3 Skills"
-        )
-
-    # ========================================================
-    # SHOW EXTRACTION RESULT
-    # ========================================================
+    # If source text has changed after extraction, require
+    # the recruiter to review/extract again.
+    source_changed = (
+        current_source != st.session_state.review_source
+    )
 
     st.subheader(
-        "🔎 Extracted Candidate Details"
+        "🔎 Reviewing Candidate Details — Editable"
     )
+
+    if source_changed:
+        st.warning(
+            "⚠️ Candidate source data has changed after the last review. "
+            "Click 'Review / Extract Candidate Details' again before generating."
+        )
+
+    review = st.session_state.review_data
 
     col1, col2 = st.columns(2)
 
     with col1:
 
-        st.write(
-            f"**Name:** "
-            f"{name or 'Not Found'}"
+        name = st.text_input(
+            "Candidate Name",
+            value=review.get("Full Name", ""),
+            key="edit_candidate_name"
         )
 
-        st.write(
-            f"**Contact:** "
-            f"{phone or 'Not Found'}"
+        phone = st.text_input(
+            "Contact Number",
+            value=review.get("Contact Number", ""),
+            key="edit_contact_number"
         )
 
-        st.write(
-            f"**Email:** "
-            f"{email or 'Not Found'}"
+        email = st.text_input(
+            "Email ID",
+            value=review.get("Email ID", ""),
+            key="edit_email"
         )
 
-        st.write(
-            f"**Current Location:** "
-            f"{location or 'Not Found'}"
+        location = st.text_input(
+            "Current Location",
+            value=review.get("Current Location", ""),
+            key="edit_current_location"
         )
 
-        st.write(
-            f"**Preferred Location:** "
-            f"{pref_location or 'Not Found'}"
+        pref_location = st.text_input(
+            "Preferred Location",
+            value=review.get("Preferred Location", ""),
+            key="edit_preferred_location"
+        )
+
+        exp = st.text_input(
+            "Experience",
+            value=review.get("Experience", ""),
+            key="edit_experience",
+            help="Example: 4.7 years"
         )
 
     with col2:
 
-        st.write(
-            f"**Experience:** "
-            f"{exp or 'Not Found'}"
+        dob = st.text_input(
+            "Date of Birth",
+            value=review.get("Date of Birth", ""),
+            key="edit_dob",
+            help="Example: 16 Sep 1994"
         )
 
-        st.write(
-            f"**DOB:** "
-            f"{dob or 'Not Found'}"
+        skill1 = st.text_input(
+            "Skill 1",
+            value=review.get("Skill 1", ""),
+            key="edit_skill1"
         )
 
-        st.write(
-            f"**Skill 1:** "
-            f"{skill_list[0] or 'Not Found'}"
+        skill2 = st.text_input(
+            "Skill 2",
+            value=review.get("Skill 2", ""),
+            key="edit_skill2"
         )
 
-        st.write(
-            f"**Skill 2:** "
-            f"{skill_list[1] or 'Not Found'}"
+        skill3 = st.text_input(
+            "Skill 3",
+            value=review.get("Skill 3", ""),
+            key="edit_skill3"
         )
 
-        st.write(
-            f"**Skill 3:** "
-            f"{skill_list[2] or 'Not Found'}"
+        # Fixed business rule
+        notice_period = st.text_input(
+            "Notice Period",
+            value="Immediate Joiner",
+            disabled=True,
+            key="edit_notice_period"
         )
 
-        st.write(
-            f"**Notice Period:** "
-            f"{notice_period}"
+        offer = st.text_input(
+            "Offers in Pipeline / In Hand",
+            value=review.get("Offers", "No"),
+            key="edit_offer"
         )
 
-    # ========================================================
-    # STOP IF MANDATORY DATA IS MISSING
-    # ========================================================
+        reason = st.text_input(
+            "Exact Reason for Change",
+            value=review.get("Reason", "Career Growth"),
+            key="edit_reason"
+        )
 
-    if missing_fields:
+    # --------------------------------------------------------
+    # SHOW FINAL REVIEW VALUES
+    # --------------------------------------------------------
 
-        st.error(
-            "❌ Profile cannot be generated.\n\n"
-            "Missing / unverified fields: "
-            + ", ".join(
-                missing_fields
+    st.markdown("---")
+    st.caption(
+        "✏️ You can edit any extracted value above. "
+        "The edited values will be used for the DOCX, filename and tracker."
+    )
+
+    # --------------------------------------------------------
+    # GENERATE PROFILE BUTTON
+    # --------------------------------------------------------
+
+    generate_clicked = st.button(
+        "📄 Confirm & Generate TCS Profile",
+        type="primary",
+        disabled=source_changed
+    )
+
+    if generate_clicked:
+
+        # ====================================================
+        # CLEAN EDITED VALUES
+        # ====================================================
+
+        name = clean(name)
+
+        phone = valid_phone(phone)
+
+        email = valid_email(email)
+
+        location = clean(location)
+
+        pref_location = clean(pref_location)
+
+        exp = clean(exp)
+
+        dob = clean(dob)
+
+        skill1 = clean(skill1)
+        skill2 = clean(skill2)
+        skill3 = clean(skill3)
+
+        # Notice is always fixed by business rule
+        notice_period = "Immediate Joiner"
+
+        offer = clean(offer)
+        reason = clean(reason)
+
+        # Existing defaults
+        if not offer:
+            offer = "No"
+
+        if not reason:
+            reason = "Career Growth"
+
+        # ----------------------------------------------------
+        # Skills
+        # ----------------------------------------------------
+
+        skill_list = [
+            skill1,
+            skill2,
+            skill3
+        ]
+
+        actual_skill_list = [
+            skill
+            for skill in skill_list
+            if skill
+        ]
+
+        # ----------------------------------------------------
+        # DOB
+        # ----------------------------------------------------
+
+        mmdd = get_mmdd(dob)
+
+        # ----------------------------------------------------
+        # VALIDATION AFTER EDITING
+        # ----------------------------------------------------
+
+        missing_fields = []
+
+        if not name:
+            missing_fields.append(
+                "Candidate Name"
             )
-        )
 
         if not phone:
-
-            st.info(
-                "If Naukri displays "
-                "'View phone number', enter the actual "
-                "candidate number in the Contact Number "
-                "Override box."
+            missing_fields.append(
+                "Valid Contact Number"
             )
 
-        st.stop()
+        if not email:
+            missing_fields.append(
+                "Valid Email ID"
+            )
 
-    # ========================================================
-    # INTERVIEW DATES
-    # ========================================================
+        if not location:
+            missing_fields.append(
+                "Current Location"
+            )
 
-    dates, now = get_interview_dates()
+        if not exp:
+            missing_fields.append(
+                "Experience"
+            )
 
-    time_slot = "10:00AM-06:00PM"
+        if not dob:
+            missing_fields.append(
+                "Date of Birth"
+            )
 
-    # ========================================================
-    # TEMPLATE PATH
-    # ========================================================
+        if not mmdd:
+            missing_fields.append(
+                "Valid DOB"
+            )
 
-    template_path = Path(
-        "tcs_template.docx"
-    )
+        if len(actual_skill_list) < 3:
+            missing_fields.append(
+                "All 3 Skills"
+            )
 
-    if not template_path.exists():
+        if missing_fields:
 
-        st.error(
-            "❌ tcs_template.docx was not found."
+            st.error(
+                "❌ Profile cannot be generated.\n\n"
+                "Please correct the following fields: "
+                + ", ".join(missing_fields)
+            )
+
+            if not phone:
+                st.info(
+                    "Enter a valid 10-digit Indian mobile number."
+                )
+
+            if not mmdd and dob:
+                st.info(
+                    "Please enter DOB in a valid format, "
+                    "for example: 16 Sep 1994."
+                )
+
+            st.stop()
+
+        # ====================================================
+        # INTERVIEW DATES
+        # ====================================================
+
+        dates, now = get_interview_dates()
+
+        time_slot = "10:00AM-06:00PM"
+
+        # ====================================================
+        # TEMPLATE PATH
+        # ====================================================
+
+        # Use the same folder as app.py when available.
+        app_dir = Path(__file__).resolve().parent
+        template_path = app_dir / "tcs_template.docx"
+
+        if not template_path.exists():
+
+            # Fallback for environments where __file__ path
+            # is not the working directory.
+            template_path = Path(
+                "tcs_template.docx"
+            )
+
+        if not template_path.exists():
+
+            st.error(
+                "❌ tcs_template.docx was not found."
+            )
+
+            st.info(
+                "Place tcs_template.docx in the same "
+                "folder as app.py."
+            )
+
+            st.stop()
+
+        # ====================================================
+        # LOAD TEMPLATE
+        # ====================================================
+
+        try:
+
+            doc = DocxTemplate(
+                str(template_path)
+            )
+
+        except Exception as e:
+
+            st.error(
+                "❌ Could not open tcs_template.docx"
+            )
+
+            st.exception(e)
+
+            st.stop()
+
+        # ====================================================
+        # TEMPLATE CONTEXT
+        # ====================================================
+
+        context = {
+
+            "NAME": name,
+
+            "CONTACT_NUMBER": phone,
+
+            "EMAIL_ID": email,
+
+            "CURRENT_LOCATION": location,
+
+            "PREFERRED_LOCATION": pref_location,
+
+            "SKILL1": skill1,
+
+            "SKILL2": skill2,
+
+            "SKILL3": skill3,
+
+            "EXP1": exp,
+
+            "EXP2": exp,
+
+            "EXP3": exp,
+
+            "NOTICE_PERIOD": notice_period,
+
+            "OFFER": offer,
+
+            "RELOCATION": (
+                pref_location
+                if pref_location
+                else location
+            ),
+
+            "REASON": reason,
+
+            "DOB": dob,
+
+            "NEXT_DATE1": dates[0],
+
+            "NEXT_DATE2": dates[1],
+
+            "NEXT_DATE3": dates[2],
+
+            "TIME": time_slot,
+        }
+
+        # ====================================================
+        # RENDER DOCX
+        # ====================================================
+
+        try:
+
+            doc.render(
+                context
+            )
+
+        except Exception as e:
+
+            st.error(
+                "❌ Error while rendering "
+                "the Word template."
+            )
+
+            st.exception(e)
+
+            st.stop()
+
+        # ====================================================
+        # FILE NAME
+        # ====================================================
+
+        safe_name = re.sub(
+            r"[^A-Za-z0-9]",
+            "",
+            name
         )
 
-        st.info(
-            "Place tcs_template.docx in the same "
-            "folder as app.py."
+        if not safe_name:
+            safe_name = "Candidate"
+
+        file_name = (
+            f"PTN_IN_RGSID_"
+            f"{safe_name}"
+            f"{mmdd}.docx"
         )
 
-        st.stop()
+        # ====================================================
+        # SAVE
+        # ====================================================
 
-    # ========================================================
-    # LOAD TEMPLATE
-    # ========================================================
+        output_path = app_dir / file_name
 
-    try:
+        try:
 
-        doc = DocxTemplate(
-            str(template_path)
-        )
+            doc.save(
+                str(output_path)
+            )
 
-    except Exception as e:
+        except Exception as e:
 
-        st.error(
-            "❌ Could not open tcs_template.docx"
-        )
+            st.error(
+                "❌ Could not save generated "
+                "Word file."
+            )
 
-        st.exception(
-            e
-        )
+            st.exception(e)
 
-        st.stop()
+            st.stop()
 
-    # ========================================================
-    # TEMPLATE CONTEXT
-    # ========================================================
+        # ====================================================
+        # DOWNLOAD
+        # ====================================================
 
-    context = {
+        try:
 
-        "NAME": name,
+            with open(
+                output_path,
+                "rb"
+            ) as file:
 
-        "CONTACT_NUMBER": phone,
+                file_bytes = file.read()
 
-        "EMAIL_ID": email,
-
-        "CURRENT_LOCATION": location,
-
-        "PREFERRED_LOCATION": pref_location,
-
-        "SKILL1": skill_list[0],
-
-        "SKILL2": skill_list[1],
-
-        "SKILL3": skill_list[2],
-
-        "EXP1": exp,
-
-        "EXP2": exp,
-
-        "EXP3": exp,
-
-        "NOTICE_PERIOD": notice_period,
-
-        "OFFER": offer,
-
-        "RELOCATION": (
-            pref_location
-            if pref_location
-            else location
-        ),
-
-        "REASON": reason,
-
-        "DOB": dob,
-
-        "NEXT_DATE1": dates[0],
-
-        "NEXT_DATE2": dates[1],
-
-        "NEXT_DATE3": dates[2],
-
-        "TIME": time_slot,
-    }
-
-    # ========================================================
-    # RENDER DOCX
-    # ========================================================
-
-    try:
-
-        doc.render(
-            context
-        )
-
-    except Exception as e:
-
-        st.error(
-            "❌ Error while rendering "
-            "the Word template."
-        )
-
-        st.exception(
-            e
-        )
-
-        st.stop()
-
-    # ========================================================
-    # FILE NAME
-    # ========================================================
-
-    safe_name = re.sub(
-        r"[^A-Za-z0-9]",
-        "",
-        name
-    )
-
-    if not safe_name:
-
-        safe_name = "Candidate"
-
-    file_name = (
-        f"PTN_IN_RGSID_"
-        f"{safe_name}"
-        f"{mmdd}.docx"
-    )
-
-    # ========================================================
-    # SAVE
-    # ========================================================
-
-    try:
-
-        doc.save(
-            file_name
-        )
-
-    except Exception as e:
-
-        st.error(
-            "❌ Could not save generated "
-            "Word file."
-        )
-
-        st.exception(
-            e
-        )
-
-        st.stop()
-
-    # ========================================================
-    # DOWNLOAD
-    # ========================================================
-
-    try:
-
-        with open(
-            file_name,
-            "rb"
-        ) as file:
+            st.success(
+                f"✅ Profile Generated Successfully: "
+                f"{file_name}"
+            )
 
             st.download_button(
                 label="📥 Download TCS Profile",
-                data=file.read(),
+                data=file_bytes,
                 file_name=file_name,
                 mime=(
                     "application/vnd.openxmlformats-officedocument."
@@ -2534,105 +2576,112 @@ if st.button(
                 )
             )
 
-    except Exception as e:
+        except Exception as e:
 
-        st.error(
-            "❌ Could not prepare file "
-            "for download."
-        )
+            st.error(
+                "❌ Could not prepare file "
+                "for download."
+            )
 
-        st.exception(
-            e
-        )
-        st.stop()
+            st.exception(e)
 
-    # ========================================================
-    # SUCCESS
-    # ========================================================
+            st.stop()
 
-    st.success(
-        f"✅ Profile Generated Successfully: "
-        f"{file_name}"
-    )
+        # ====================================================
+        # TRACKER
+        # ====================================================
 
-    # ========================================================
-    # TRACKER
-    # ========================================================
+        if tracker_format:
 
-    if tracker_format:
+            tracker_line = generate_tracker_row(
+                tracker_format=tracker_format,
+                name=name,
+                phone=phone,
+                email=email,
+                skill_list=skill_list,
+                exp=exp,
+                location=location,
+                pref_location=pref_location,
+                dob=dob,
+                now=now
+            )
 
-        tracker_line = generate_tracker_row(
-            tracker_format=tracker_format,
-            name=name,
-            phone=phone,
-            email=email,
-            skill_list=skill_list,
-            exp=exp,
-            location=location,
-            pref_location=pref_location,
-            dob=dob,
-            now=now
-        )
+            st.subheader(
+                "📊 Tracker Output (Copy Paste)"
+            )
+
+            st.code(
+                tracker_line,
+                language=None
+            )
+
+        # ====================================================
+        # FINAL SUMMARY
+        # ====================================================
 
         st.subheader(
-            "📊 Tracker Output (Copy Paste)"
+            "📄 Generated Profile Summary"
         )
 
-        st.code(
-            tracker_line,
-            language=None
+        st.write(
+            f"**File Name:** `{file_name}`"
         )
 
-    # ========================================================
-    # FINAL SUMMARY
-    # ========================================================
+        st.write(
+            f"**Candidate:** {name}"
+        )
 
-    st.subheader(
-        "📄 Generated Profile Summary"
-    )
+        st.write(
+            f"**Contact:** {phone}"
+        )
 
-    st.write(
-        f"**File Name:** `{file_name}`"
-    )
+        st.write(
+            f"**Email:** {email}"
+        )
 
-    st.write(
-        f"**Candidate:** {name}"
-    )
+        st.write(
+            f"**Current Location:** "
+            f"{location}"
+        )
 
-    st.write(
-        f"**Contact:** {phone}"
-    )
+        st.write(
+            f"**Preferred Location:** "
+            f"{pref_location}"
+        )
 
-    st.write(
-        f"**Email:** {email}"
-    )
+        st.write(
+            f"**Experience:** {exp}"
+        )
 
-    st.write(
-        f"**Current Location:** "
-        f"{location}"
-    )
+        st.write(
+            f"**DOB:** {dob}"
+        )
 
-    st.write(
-        f"**Experience:** {exp}"
-    )
+        st.write(
+            f"**Skill 1:** {skill1}"
+        )
 
-    st.write(
-        f"**DOB:** {dob}"
-    )
+        st.write(
+            f"**Skill 2:** {skill2}"
+        )
 
-    st.write(
-        f"**Notice Period:** "
-        f"{notice_period}"
-    )
+        st.write(
+            f"**Skill 3:** {skill3}"
+        )
 
-    st.write(
-        f"**Interview Dates:** "
-        f"{dates[0]}, "
-        f"{dates[1]}, "
-        f"{dates[2]}"
-    )
+        st.write(
+            f"**Notice Period:** "
+            f"{notice_period}"
+        )
 
-    st.write(
-        f"**Time Slot:** "
-        f"{time_slot}"
-    )
+        st.write(
+            f"**Interview Dates:** "
+            f"{dates[0]}, "
+            f"{dates[1]}, "
+            f"{dates[2]}"
+        )
+
+        st.write(
+            f"**Time Slot:** "
+            f"{time_slot}"
+        )
