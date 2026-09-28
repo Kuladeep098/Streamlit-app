@@ -30,19 +30,6 @@ email_text = st.text_area(
     height=350
 )
 
-tracker_format = st.text_input(
-    "Paste Tracker Columns (TAB separated)",
-    placeholder=(
-        "Dates\tBeeline ID\tCandidate Name\tContact Number\t"
-        "Email ID\tSkill\tTotal Exp"
-    )
-)
-
-manual_phone = st.text_input(
-    "Candidate Contact Number (Optional Override)",
-    placeholder="Example: 9611481059"
-)
-
 
 # ============================================================
 # BASIC CLEANING
@@ -2040,13 +2027,10 @@ if st.button(
     extracted = auto_extract(source_text)
 
     # Contact number:
-    # Manual override has highest priority
-    extracted_phone = valid_phone(manual_phone)
-
-    if not extracted_phone:
-        extracted_phone = valid_phone(
-            extracted.get("Contact Number", "")
-        )
+    # Extract automatically from the candidate data.
+    extracted_phone = valid_phone(
+        extracted.get("Contact Number", "")
+    )
 
     if not extracted_phone:
         extracted_phone = first_phone(source_text)
@@ -2591,34 +2575,6 @@ if st.session_state.review_data is not None:
             st.exception(e)
 
             st.stop()
-
-        # ====================================================
-        # TRACKER
-        # ====================================================
-
-        if tracker_format:
-
-            tracker_line = generate_tracker_row(
-                tracker_format=tracker_format,
-                name=name,
-                phone=phone,
-                email=email,
-                skill_list=skill_list,
-                exp=exp,
-                location=location,
-                pref_location=pref_location,
-                dob=dob,
-                now=now
-            )
-
-            st.subheader(
-                "📊 Tracker Output (Copy Paste)"
-            )
-
-            st.code(
-                tracker_line,
-                language=None
-            )
 
         # ====================================================
         # FINAL SUMMARY
