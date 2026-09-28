@@ -1811,36 +1811,33 @@ def get_interview_dates():
         ]
     )
 
-    current = now.replace(
-        hour=0,
-        minute=0,
-        second=0,
-        microsecond=0
-    )
-
-    cutoff = now.replace(
-        hour=14,
-        minute=0,
-        second=0,
-        microsecond=0
-    )
-
-    # At / after 2 PM -> next working day
-    if now >= cutoff:
-
-        current += timedelta(
-            days=1
+    # ALWAYS start from tomorrow.
+    # The day on which the profile is prepared
+    # should never be used as an interview date.
+    current = (
+        now.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0
         )
+        + timedelta(days=1)
+    )
 
     dates = []
 
     while len(dates) < 3:
 
-        if (
-            current.weekday() < 5
-            and current.date()
-            not in india_holidays
-        ):
+        # Monday = 0
+        # Sunday = 6
+        is_weekday = current.weekday() < 5
+
+        is_holiday = (
+            current.date()
+            in india_holidays
+        )
+
+        if is_weekday and not is_holiday:
 
             dates.append(
                 current.strftime(
@@ -1853,7 +1850,6 @@ def get_interview_dates():
         )
 
     return dates, now
-
 
 # ============================================================
 # TRACKER
