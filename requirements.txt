@@ -7,3 +7,4 @@ pypdf
 PyMuPDF
 python-docx
 docxcompose
+libreoffice-writer
