@@ -4,3 +4,6 @@ docxtpl
 holidays
 python-dateutil
 pytz
+PyMuPDF
+python-docx
+docxcompose
