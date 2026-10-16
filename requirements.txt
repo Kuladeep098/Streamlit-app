@@ -1,10 +1,9 @@
 streamlit
-google-genai
 docxtpl
 holidays
 python-dateutil
 pytz
+pypdf
 PyMuPDF
 python-docx
 docxcompose
-pypdf
