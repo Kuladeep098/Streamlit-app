@@ -2614,79 +2614,49 @@ if st.session_state.get("candidate_details_ready"):
             st.stop()
 
         # ========================================================
-        # DOWNLOAD PROFILE AND OPTIONAL MERGED CV OUTPUTS
+        # PDF-ONLY OUTPUT (PROFILE FIRST, THEN OPTIONAL ORIGINAL CV)
         # ========================================================
 
         try:
-            profile_docx_bytes = Path(file_name).read_bytes()
+            pdf_stem = Path(file_name).stem
+            output_pdf_name = pdf_stem + ("_Merged.pdf" if uploaded_cv is not None else ".pdf")
+
+            with tempfile.TemporaryDirectory(prefix="tcs_profile_pdf_") as output_temp:
+                output_temp_path = Path(output_temp)
+                output_pdf_path = output_temp_path / output_pdf_name
+
+                if uploaded_cv is not None:
+                    saved_cv_path, cv_suffix = save_uploaded_cv(uploaded_cv, output_temp_path)
+                    create_merged_pdf_output(
+                        profile_docx_path=Path(file_name),
+                        saved_cv_path=saved_cv_path,
+                        cv_suffix=cv_suffix,
+                        merged_pdf_path=output_pdf_path,
+                        work_dir=output_temp_path,
+                    )
+                    success_message = "TCS profile and complete candidate CV combined into one PDF."
+                else:
+                    profile_pdf_path = _convert_docx_to_pdf(
+                        Path(file_name), output_temp_path / "profile_pdf"
+                    )
+                    shutil.copyfile(profile_pdf_path, output_pdf_path)
+                    success_message = "TCS profile PDF created successfully."
+
+                output_pdf_bytes = output_pdf_path.read_bytes()
+
+            st.success(success_message)
             st.download_button(
-                label="📥 Download TCS Profile Only (DOCX)",
-                data=profile_docx_bytes,
-                file_name=file_name,
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                key="download_profile_only_docx",
+                label="📕 Download Final PDF",
+                data=output_pdf_bytes,
+                file_name=output_pdf_name,
+                mime="application/pdf",
+                key="download_final_pdf_only",
             )
 
-            if uploaded_cv is not None:
-                merged_stem = Path(file_name).stem + "_Merged"
-                merged_docx_name = merged_stem + ".docx"
-                merged_pdf_name = merged_stem + ".pdf"
-
-                with tempfile.TemporaryDirectory(prefix="tcs_profile_cv_merge_") as merge_temp:
-                    merge_temp_path = Path(merge_temp)
-                    merged_docx_path = merge_temp_path / merged_docx_name
-                    merged_pdf_path = merge_temp_path / merged_pdf_name
-
-                    try:
-                        saved_cv_path, cv_suffix = save_uploaded_cv(uploaded_cv, merge_temp_path)
-                        create_merged_docx_output(
-                            profile_docx_path=Path(file_name),
-                            saved_cv_path=saved_cv_path,
-                            cv_suffix=cv_suffix,
-                            merged_docx_path=merged_docx_path,
-                            work_dir=merge_temp_path,
-                        )
-                        merged_docx_bytes = merged_docx_path.read_bytes()
-                    except Exception as docx_merge_error:
-                        st.error("Could not create the merged Profile + CV DOCX.")
-                        st.exception(docx_merge_error)
-                        st.info("Please confirm the uploaded CV is a valid PDF or DOCX and that PyMuPDF, python-docx, and docxcompose are installed.")
-                    else:
-                        st.success("Candidate CV merged after the TCS profile sheet in the Word file.")
-                        st.download_button(
-                            label="📄 Download Merged Profile + CV (DOCX)",
-                            data=merged_docx_bytes,
-                            file_name=merged_docx_name,
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            key="download_merged_profile_cv_docx",
-                        )
-
-                        # PDF is generated independently so missing LibreOffice cannot
-                        # prevent the user from downloading the successfully merged DOCX.
-                        try:
-                            create_merged_pdf_output(
-                                profile_docx_path=Path(file_name),
-                                saved_cv_path=saved_cv_path,
-                                cv_suffix=cv_suffix,
-                                merged_pdf_path=merged_pdf_path,
-                                work_dir=merge_temp_path,
-                            )
-                            merged_pdf_bytes = merged_pdf_path.read_bytes()
-                        except Exception as pdf_merge_error:
-                            st.warning("The merged DOCX is ready, but merged PDF creation failed. Install LibreOffice on the app host to enable DOCX-to-PDF conversion.")
-                            st.caption(str(pdf_merge_error))
-                        else:
-                            st.download_button(
-                                label="📕 Download Merged Profile + CV (PDF)",
-                                data=merged_pdf_bytes,
-                                file_name=merged_pdf_name,
-                                mime="application/pdf",
-                                key="download_merged_profile_cv_pdf",
-                            )
-            
-        except Exception as e:
-            st.error("❌ Could not prepare the generated files for download.")
-            st.exception(e)
+        except Exception as pdf_error:
+            st.error("Could not create the final PDF. The app host must have LibreOffice Writer installed and available as `soffice`.")
+            st.caption("On Streamlit Community Cloud, a system package install can cause deployment failures if the build runs out of memory or the package installation fails. Check Manage app → Logs before changing packages again.")
+            st.exception(pdf_error)
             st.stop()
 
         # ========================================================
