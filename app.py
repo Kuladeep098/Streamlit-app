@@ -2146,10 +2146,14 @@ def create_merged_cv_outputs(profile_docx_path, uploaded_file, merged_docx_path,
 # GENERATE PROFILE
 # ============================================================
 
-if st.button(
-    "Generate TCS Profile",
-    type="primary"
-):
+# ============================================================
+# EXTRACT CANDIDATE DETAILS
+# ============================================================
+
+if st.button("Extract Candidate Details", type="primary", key="extract_candidate_details"):
+    if not email_text.strip():
+        st.warning("Please paste candidate Email / Naukri / Resdex data.")
+        st.stop()
 
     # ========================================================
     # INPUT VALIDATION
@@ -2326,123 +2330,383 @@ if st.button(
         reason = "Career Growth"
 
     # ========================================================
-    # VALIDATION
-    # IMPORTANT:
-    # VALIDATE BEFORE CREATING DOCX
-    # ========================================================
 
-    missing_fields = []
 
-    if not name:
+    # Save extracted values so the editable review survives Streamlit reruns.
+    st.session_state["candidate_details_ready"] = True
+    st.session_state["candidate_details_source"] = email_text
+    for field_name in [
+        "name", "phone", "email", "location", "pref_location", "exp", "dob",
+        "skill1", "skill2", "skill3", "notice_period", "offer", "reason"
+    ]:
+        st.session_state[f"candidate_{field_name}"] = {
+            "name": name,
+            "phone": phone,
+            "email": email,
+            "location": location,
+            "pref_location": pref_location,
+            "exp": exp,
+            "dob": dob,
+            "skill1": skill_list[0] if len(skill_list) > 0 else "",
+            "skill2": skill_list[1] if len(skill_list) > 1 else "",
+            "skill3": skill_list[2] if len(skill_list) > 2 else "",
+            "notice_period": notice_period,
+            "offer": offer,
+            "reason": reason,
+        }[field_name]
 
-        missing_fields.append(
-            "Candidate Name"
-        )
-
-    if not phone:
-
-        missing_fields.append(
-            "Contact Number"
-        )
-
-    if not email:
-
-        missing_fields.append(
-            "Email ID"
-        )
-
-    if not location:
-
-        missing_fields.append(
-            "Current Location"
-        )
-
-    if not exp:
-
-        missing_fields.append(
-            "Experience"
-        )
-
-    if not dob:
-
-        missing_fields.append(
-            "Date of Birth"
-        )
-
-    if not mmdd:
-
-        missing_fields.append(
-            "Valid DOB"
-        )
-
-    if len(actual_skill_list) < 3:
-
-        missing_fields.append(
-            "At least 3 Skills"
-        )
-
-    # ========================================================
-    # SHOW EXTRACTION RESULT
-    # ========================================================
-
-    st.subheader(
-        "🔎 Extracted Candidate Details"
-    )
+# Clear stale review values when a different source is pasted and extracted again.
+if st.session_state.get("candidate_details_ready"):
+    st.subheader("🔎 Extracted Candidate Details — Editable")
 
     col1, col2 = st.columns(2)
-
     with col1:
+        name = st.text_input("Candidate Name", key="candidate_name")
+        phone = st.text_input("Contact Number", key="candidate_phone")
+        email = st.text_input("Email ID", key="candidate_email")
+        location = st.text_input("Current Location", key="candidate_location")
+        pref_location = st.text_input("Preferred Location", key="candidate_pref_location")
+    with col2:
+        exp = st.text_input("Experience", key="candidate_exp")
+        dob = st.text_input("Date of Birth", key="candidate_dob", help="Enter DOB in a recognizable format, e.g. 16 Sep 1994.")
+        skill1 = st.text_input("Skill 1", key="candidate_skill1")
+        skill2 = st.text_input("Skill 2", key="candidate_skill2")
+        skill3 = st.text_input("Skill 3", key="candidate_skill3")
+        st.text_input("Notice Period", key="candidate_notice_period", disabled=True)
 
-        st.write(
-            f"**Name:** "
-            f"{name or 'Not Found'}"
+    skill_list = [clean(skill1), clean(skill2), clean(skill3)]
+    actual_skill_list = [skill for skill in skill_list if skill]
+    exp = format_experience(exp)
+    mmdd = get_mmdd(dob)
+    notice_period = "Immediate Joiner"
+    offer = clean(st.session_state.get("candidate_offer", "No")) or "No"
+    reason = clean(st.session_state.get("candidate_reason", "Career Growth")) or "Career Growth"
+
+    missing_fields = []
+    if not clean(name): missing_fields.append("Candidate Name")
+    if not valid_phone(phone): missing_fields.append("Contact Number")
+    else: phone = valid_phone(phone)
+    if not valid_email(email): missing_fields.append("Email ID")
+    else: email = valid_email(email)
+    if not clean(location): missing_fields.append("Current Location")
+    if not clean(exp): missing_fields.append("Experience")
+    if not clean(dob) or not mmdd: missing_fields.append("Valid Date of Birth")
+    if len(actual_skill_list) < 3: missing_fields.append("At least 3 Skills")
+
+    if missing_fields:
+        st.warning("Please complete or correct these fields before generating: " + ", ".join(missing_fields))
+
+    if st.button("Generate TCS Profile", type="primary", key="generate_tcs_profile", disabled=bool(missing_fields)):
+        # Normalize edited values before filling the template.
+        name = clean(name)
+        location = clean(location)
+        pref_location = clean(pref_location)
+        exp = clean(exp)
+        dob = clean(dob)
+        skill_list = [clean(skill) for skill in skill_list]
+        phone = valid_phone(phone)
+        email = valid_email(email)
+        mmdd = get_mmdd(dob)
+
+        # ========================================================
+        # STOP IF MANDATORY DATA IS MISSING
+        # ========================================================
+
+        if missing_fields:
+
+            st.error(
+                "❌ Profile cannot be generated.\n\n"
+                "Missing / unverified fields: "
+                + ", ".join(
+                    missing_fields
+                )
+            )
+
+            if not phone:
+
+                st.info(
+                    "Please ensure the candidate's actual contact number "
+                    "is included in the pasted source data."
+                )
+
+            st.stop()
+
+        # ========================================================
+        # INTERVIEW DATES
+        # ========================================================
+
+        dates, now = get_interview_dates()
+
+        time_slot = "10:00AM-06:00PM"
+
+        # ========================================================
+        # TEMPLATE PATH
+        # ========================================================
+
+        template_path = Path(
+            "tcs_template.docx"
+        )
+
+        if not template_path.exists():
+
+            st.error(
+                "❌ tcs_template.docx was not found."
+            )
+
+            st.info(
+                "Place tcs_template.docx in the same "
+                "folder as app.py."
+            )
+
+            st.stop()
+
+        # ========================================================
+        # LOAD TEMPLATE
+        # ========================================================
+
+        try:
+
+            doc = DocxTemplate(
+                str(template_path)
+            )
+
+        except Exception as e:
+
+            st.error(
+                "❌ Could not open tcs_template.docx"
+            )
+
+            st.exception(
+                e
+            )
+
+            st.stop()
+
+        # ========================================================
+        # TEMPLATE CONTEXT
+        # ========================================================
+
+        context = {
+
+            "NAME": name,
+
+            "CONTACT_NUMBER": phone,
+
+            "EMAIL_ID": email,
+
+            "CURRENT_LOCATION": location,
+
+            "PREFERRED_LOCATION": pref_location,
+
+            "SKILL1": skill_list[0],
+
+            "SKILL2": skill_list[1],
+
+            "SKILL3": skill_list[2],
+
+            "EXP1": exp,
+
+            "EXP2": exp,
+
+            "EXP3": exp,
+
+            "NOTICE_PERIOD": notice_period,
+
+            "OFFER": offer,
+
+            "RELOCATION": (
+                pref_location
+                if pref_location
+                else location
+            ),
+
+            "REASON": reason,
+
+            "DOB": dob,
+
+            "NEXT_DATE1": dates[0],
+
+            "NEXT_DATE2": dates[1],
+
+            "NEXT_DATE3": dates[2],
+
+            "TIME": time_slot,
+        }
+
+        # ========================================================
+        # RENDER DOCX
+        # ========================================================
+
+        try:
+
+            doc.render(
+                context
+            )
+
+        except Exception as e:
+
+            st.error(
+                "❌ Error while rendering "
+                "the Word template."
+            )
+
+            st.exception(
+                e
+            )
+
+            st.stop()
+
+        # ========================================================
+        # FILE NAME
+        # ========================================================
+
+        safe_name = re.sub(
+            r"[^A-Za-z0-9]",
+            "",
+            name
+        )
+
+        if not safe_name:
+
+            safe_name = "Candidate"
+
+        file_name = (
+            f"PTN_IN_RGSID_"
+            f"{safe_name}"
+            f"{mmdd}.docx"
+        )
+
+        # ========================================================
+        # SAVE
+        # ========================================================
+
+        try:
+
+            doc.save(
+                file_name
+            )
+
+        except Exception as e:
+
+            st.error(
+                "❌ Could not save generated "
+                "Word file."
+            )
+
+            st.exception(
+                e
+            )
+
+            st.stop()
+
+        # ========================================================
+        # DOWNLOAD PROFILE AND OPTIONAL MERGED CV OUTPUTS
+        # ========================================================
+
+        try:
+            profile_docx_bytes = Path(file_name).read_bytes()
+            st.download_button(
+                label="📥 Download TCS Profile Only (DOCX)",
+                data=profile_docx_bytes,
+                file_name=file_name,
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="download_profile_only_docx",
+            )
+
+            if uploaded_cv is not None:
+                merged_stem = Path(file_name).stem + "_Merged"
+                merged_docx_name = merged_stem + ".docx"
+                merged_pdf_name = merged_stem + ".pdf"
+
+                with tempfile.TemporaryDirectory(prefix="tcs_profile_cv_merge_") as merge_temp:
+                    merge_temp_path = Path(merge_temp)
+                    merged_docx_path = merge_temp_path / merged_docx_name
+                    merged_pdf_path = merge_temp_path / merged_pdf_name
+
+                    try:
+                        create_merged_cv_outputs(
+                            profile_docx_path=Path(file_name),
+                            uploaded_file=uploaded_cv,
+                            merged_docx_path=merged_docx_path,
+                            merged_pdf_path=merged_pdf_path,
+                            work_dir=merge_temp_path,
+                        )
+                        merged_docx_bytes = merged_docx_path.read_bytes()
+                        merged_pdf_bytes = merged_pdf_path.read_bytes()
+                    except Exception as merge_error:
+                        st.error("Could not create the merged CV files.")
+                        st.exception(merge_error)
+                        st.info(
+                            "The profile-only DOCX is still available above. "
+                            "For PDF/DOCX merging, install LibreOffice, PyMuPDF, "
+                            "pypdf, and python-docx in the app environment."
+                        )
+                    else:
+                        st.success("Candidate CV merged after the TCS profile sheet.")
+                        st.download_button(
+                            label="📄 Download Merged Profile + CV (DOCX)",
+                            data=merged_docx_bytes,
+                            file_name=merged_docx_name,
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key="download_merged_profile_cv_docx",
+                        )
+                        st.download_button(
+                            label="📕 Download Merged Profile + CV (PDF)",
+                            data=merged_pdf_bytes,
+                            file_name=merged_pdf_name,
+                            mime="application/pdf",
+                            key="download_merged_profile_cv_pdf",
+                        )
+            
+        except Exception as e:
+            st.error("❌ Could not prepare the generated files for download.")
+            st.exception(e)
+            st.stop()
+
+        # ========================================================
+        # SUCCESS
+        # ========================================================
+
+        st.success(
+            f"✅ Profile Generated Successfully: "
+            f"{file_name}"
+        )
+
+        # ========================================================
+        # FINAL SUMMARY
+        # ========================================================
+
+        st.subheader(
+            "📄 Generated Profile Summary"
         )
 
         st.write(
-            f"**Contact:** "
-            f"{phone or 'Not Found'}"
+            f"**File Name:** `{file_name}`"
         )
 
         st.write(
-            f"**Email:** "
-            f"{email or 'Not Found'}"
+            f"**Candidate:** {name}"
+        )
+
+        st.write(
+            f"**Contact:** {phone}"
+        )
+
+        st.write(
+            f"**Email:** {email}"
         )
 
         st.write(
             f"**Current Location:** "
-            f"{location or 'Not Found'}"
+            f"{location}"
         )
 
         st.write(
-            f"**Preferred Location:** "
-            f"{pref_location or 'Not Found'}"
-        )
-
-    with col2:
-
-        st.write(
-            f"**Experience:** "
-            f"{exp or 'Not Found'}"
+            f"**Experience:** {exp}"
         )
 
         st.write(
-            f"**DOB:** "
-            f"{dob or 'Not Found'}"
-        )
-
-        st.write(
-            f"**Skill 1:** "
-            f"{skill_list[0] or 'Not Found'}"
-        )
-
-        st.write(
-            f"**Skill 2:** "
-            f"{skill_list[1] or 'Not Found'}"
-        )
-
-        st.write(
-            f"**Skill 3:** "
-            f"{skill_list[2] or 'Not Found'}"
+            f"**DOB:** {dob}"
         )
 
         st.write(
@@ -2450,320 +2714,14 @@ if st.button(
             f"{notice_period}"
         )
 
-    # ========================================================
-    # STOP IF MANDATORY DATA IS MISSING
-    # ========================================================
-
-    if missing_fields:
-
-        st.error(
-            "❌ Profile cannot be generated.\n\n"
-            "Missing / unverified fields: "
-            + ", ".join(
-                missing_fields
-            )
+        st.write(
+            f"**Interview Dates:** "
+            f"{dates[0]}, "
+            f"{dates[1]}, "
+            f"{dates[2]}"
         )
 
-        if not phone:
-
-            st.info(
-                "Please ensure the candidate's actual contact number "
-                "is included in the pasted source data."
-            )
-
-        st.stop()
-
-    # ========================================================
-    # INTERVIEW DATES
-    # ========================================================
-
-    dates, now = get_interview_dates()
-
-    time_slot = "10:00AM-06:00PM"
-
-    # ========================================================
-    # TEMPLATE PATH
-    # ========================================================
-
-    template_path = Path(
-        "tcs_template.docx"
-    )
-
-    if not template_path.exists():
-
-        st.error(
-            "❌ tcs_template.docx was not found."
+        st.write(
+            f"**Time Slot:** "
+            f"{time_slot}"
         )
-
-        st.info(
-            "Place tcs_template.docx in the same "
-            "folder as app.py."
-        )
-
-        st.stop()
-
-    # ========================================================
-    # LOAD TEMPLATE
-    # ========================================================
-
-    try:
-
-        doc = DocxTemplate(
-            str(template_path)
-        )
-
-    except Exception as e:
-
-        st.error(
-            "❌ Could not open tcs_template.docx"
-        )
-
-        st.exception(
-            e
-        )
-
-        st.stop()
-
-    # ========================================================
-    # TEMPLATE CONTEXT
-    # ========================================================
-
-    context = {
-
-        "NAME": name,
-
-        "CONTACT_NUMBER": phone,
-
-        "EMAIL_ID": email,
-
-        "CURRENT_LOCATION": location,
-
-        "PREFERRED_LOCATION": pref_location,
-
-        "SKILL1": skill_list[0],
-
-        "SKILL2": skill_list[1],
-
-        "SKILL3": skill_list[2],
-
-        "EXP1": exp,
-
-        "EXP2": exp,
-
-        "EXP3": exp,
-
-        "NOTICE_PERIOD": notice_period,
-
-        "OFFER": offer,
-
-        "RELOCATION": (
-            pref_location
-            if pref_location
-            else location
-        ),
-
-        "REASON": reason,
-
-        "DOB": dob,
-
-        "NEXT_DATE1": dates[0],
-
-        "NEXT_DATE2": dates[1],
-
-        "NEXT_DATE3": dates[2],
-
-        "TIME": time_slot,
-    }
-
-    # ========================================================
-    # RENDER DOCX
-    # ========================================================
-
-    try:
-
-        doc.render(
-            context
-        )
-
-    except Exception as e:
-
-        st.error(
-            "❌ Error while rendering "
-            "the Word template."
-        )
-
-        st.exception(
-            e
-        )
-
-        st.stop()
-
-    # ========================================================
-    # FILE NAME
-    # ========================================================
-
-    safe_name = re.sub(
-        r"[^A-Za-z0-9]",
-        "",
-        name
-    )
-
-    if not safe_name:
-
-        safe_name = "Candidate"
-
-    file_name = (
-        f"PTN_IN_RGSID_"
-        f"{safe_name}"
-        f"{mmdd}.docx"
-    )
-
-    # ========================================================
-    # SAVE
-    # ========================================================
-
-    try:
-
-        doc.save(
-            file_name
-        )
-
-    except Exception as e:
-
-        st.error(
-            "❌ Could not save generated "
-            "Word file."
-        )
-
-        st.exception(
-            e
-        )
-
-        st.stop()
-
-    # ========================================================
-    # DOWNLOAD PROFILE AND OPTIONAL MERGED CV OUTPUTS
-    # ========================================================
-
-    try:
-        profile_docx_bytes = Path(file_name).read_bytes()
-        st.download_button(
-            label="📥 Download TCS Profile Only (DOCX)",
-            data=profile_docx_bytes,
-            file_name=file_name,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            key="download_profile_only_docx",
-        )
-
-        if uploaded_cv is not None:
-            merged_stem = Path(file_name).stem + "_Merged"
-            merged_docx_name = merged_stem + ".docx"
-            merged_pdf_name = merged_stem + ".pdf"
-
-            with tempfile.TemporaryDirectory(prefix="tcs_profile_cv_merge_") as merge_temp:
-                merge_temp_path = Path(merge_temp)
-                merged_docx_path = merge_temp_path / merged_docx_name
-                merged_pdf_path = merge_temp_path / merged_pdf_name
-
-                try:
-                    create_merged_cv_outputs(
-                        profile_docx_path=Path(file_name),
-                        uploaded_file=uploaded_cv,
-                        merged_docx_path=merged_docx_path,
-                        merged_pdf_path=merged_pdf_path,
-                        work_dir=merge_temp_path,
-                    )
-                    merged_docx_bytes = merged_docx_path.read_bytes()
-                    merged_pdf_bytes = merged_pdf_path.read_bytes()
-                except Exception as merge_error:
-                    st.error("Could not create the merged CV files.")
-                    st.exception(merge_error)
-                    st.info(
-                        "The profile-only DOCX is still available above. "
-                        "For PDF/DOCX merging, install LibreOffice, PyMuPDF, "
-                        "pypdf, and python-docx in the app environment."
-                    )
-                else:
-                    st.success("Candidate CV merged after the TCS profile sheet.")
-                    st.download_button(
-                        label="📄 Download Merged Profile + CV (DOCX)",
-                        data=merged_docx_bytes,
-                        file_name=merged_docx_name,
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        key="download_merged_profile_cv_docx",
-                    )
-                    st.download_button(
-                        label="📕 Download Merged Profile + CV (PDF)",
-                        data=merged_pdf_bytes,
-                        file_name=merged_pdf_name,
-                        mime="application/pdf",
-                        key="download_merged_profile_cv_pdf",
-                    )
-            
-    except Exception as e:
-        st.error("❌ Could not prepare the generated files for download.")
-        st.exception(e)
-        st.stop()
-
-    # ========================================================
-    # SUCCESS
-    # ========================================================
-
-    st.success(
-        f"✅ Profile Generated Successfully: "
-        f"{file_name}"
-    )
-
-    # ========================================================
-    # FINAL SUMMARY
-    # ========================================================
-
-    st.subheader(
-        "📄 Generated Profile Summary"
-    )
-
-    st.write(
-        f"**File Name:** `{file_name}`"
-    )
-
-    st.write(
-        f"**Candidate:** {name}"
-    )
-
-    st.write(
-        f"**Contact:** {phone}"
-    )
-
-    st.write(
-        f"**Email:** {email}"
-    )
-
-    st.write(
-        f"**Current Location:** "
-        f"{location}"
-    )
-
-    st.write(
-        f"**Experience:** {exp}"
-    )
-
-    st.write(
-        f"**DOB:** {dob}"
-    )
-
-    st.write(
-        f"**Notice Period:** "
-        f"{notice_period}"
-    )
-
-    st.write(
-        f"**Interview Dates:** "
-        f"{dates[0]}, "
-        f"{dates[1]}, "
-        f"{dates[2]}"
-    )
-
-    st.write(
-        f"**Time Slot:** "
-        f"{time_slot}"
-    )
